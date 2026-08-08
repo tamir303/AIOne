@@ -1,0 +1,50 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-filesystem",
+        "."
+      ]
+    },
+    "github": {
+      "type": "http",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${GITHUB_MCP_TOKEN}"
+      }
+    },
+    "fly": {
+      "command": "node",
+      "args": [
+        "./mcp/fly-server/dist/index.js"
+      ],
+      "env": {
+        "FLY_API_TOKEN": "${FLY_API_TOKEN}",
+        "FLY_ORG": "${FLY_ORG}"
+      }
+    },
+    "registry": {
+      "command": "node",
+      "args": [
+        "./mcp/registry-server/dist/index.js"
+      ],
+      "env": {
+        "GHCR_TOKEN": "${GHCR_TOKEN}",
+        "REGISTRY_HOST": "${REGISTRY_HOST}"
+      }
+    },
+    "supabase": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "@supabase/mcp-server-supabase@latest",
+        "--read-only"
+      ],
+      "env": {
+        "SUPABASE_ACCESS_TOKEN": "${SUPABASE_ACCESS_TOKEN}"
+      }
+    }
+  }
+}

@@ -1,0 +1,41 @@
+# Secrets — never commit. See docs/security.md.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+id_rsa*
+secrets/
+
+# Claude Code local overrides (machine-specific, not shared)
+.claude/settings.local.json
+
+# Dependencies & build output
+node_modules/
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# Tooling caches
+.turbo/
+.cache/
+coverage/
+.pytest_cache/
+__pycache__/
+.venv/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Sandbox and deploy scratch
+.fly/
+.terraform/
+*.tfstate
+*.tfstate.backup
+.sandbox-scratch/

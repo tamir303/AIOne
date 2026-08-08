@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run lint:*)",
+      "Bash(npm run test:*)",
+      "Bash(npm test:*)",
+      "Bash(npx tsc:*)",
+      "Bash(pnpm build:*)",
+      "Bash(pnpm lint:*)",
+      "Bash(pnpm test:*)",
+      "Bash(docker build:*)",
+      "Bash(trivy image:*)",
+      "Bash(flyctl status:*)",
+      "Bash(flyctl logs:*)",
+      "Bash(gh pr view:*)",
+      "Bash(gh run view:*)",
+      "Bash(gh run list:*)"
+    ],
+    "ask": [
+      "Bash(git push:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr merge:*)",
+      "Bash(docker push:*)",
+      "Bash(flyctl deploy:*)",
+      "Bash(flyctl secrets:*)",
+      "Bash(terraform apply:*)",
+      "Bash(pulumi up:*)",
+      "Bash(npm publish:*)",
+      "Bash(npx supabase db push:*)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./**/.env)",
+      "Read(./**/.env.*)",
+      "Read(./secrets/**)",
+      "Read(./**/*.pem)",
+      "Read(./**/id_rsa*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(rm -rf /:*)",
+      "Bash(sudo:*)",
+      "Bash(curl:*)",
+      "Bash(wget:*)",
+      "Bash(flyctl apps destroy:*)",
+      "Bash(flyctl postgres detach:*)",
+      "Bash(terraform destroy:*)",
+      "Bash(pulumi destroy:*)"
+    ]
+  },
+  "env": {
+    "AIONE_TRUST_TIER": "balanced",
+    "AIONE_DEPLOY_TARGET": "fly",
+    "AIONE_SANDBOX_EGRESS": "deny"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .claude/hooks/guard-destructive.mjs",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  },
+  "enableAllProjectMcpServers": false,
+  "enabledMcpjsonServers": [
+    "filesystem",
+    "github"
+  ],
+  "includeCoAuthoredBy": true,
+  "cleanupPeriodDays": 60
+}
