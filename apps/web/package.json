@@ -11,9 +11,10 @@
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {
+    "@aione/core": "workspace:*",
+    "@clerk/react": "^6.13.1",
     "react": "^18.2.0",
-    "react-dom": "^18.2.0",
-    "@aione/core": "workspace:*"
+    "react-dom": "^18.2.0"
   },
   "devDependencies": {
     "@types/react": "^18.2.0",

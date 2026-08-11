@@ -5,7 +5,7 @@ export default defineConfig({
   out: './drizzle',
   driver: 'pg',
   dbCredentials: {
-    connectionString: process.env.DATABASE_URL || 'postgres://aione:password@localhost:5432/aione',
+    connectionString: process.env.DATABASE_MIGRATION_URL || 'postgres://aione:password@localhost:5432/aione',
   },
   migrations: {
     table: '__drizzle_migrations',

@@ -1,0 +1,715 @@
+af9e97c fix: wire web UI to API, correct docker_build policy, add lint scripts, fix ESM extensions
+ apps/api/package.json             |  3 +-
+ apps/api/src/handlers/events.ts   | 34 +++++++++++++++++++
+ apps/api/src/handlers/gate.ts     | 27 +--------------
+ apps/api/src/handlers/runs.ts     | 70 +++++++++++++++++++++++++++++++++++++++
+ apps/api/src/index.ts             |  8 +++--
+ apps/api/tsconfig.json            |  3 +-
+ apps/web/package.json             |  3 +-
+ apps/web/src/App.tsx              | 33 +++++++++---------
+ apps/web/src/hooks/useRun.ts      |  2 +-
+ apps/web/src/main.tsx             |  2 +-
+ apps/web/src/pages/DiffReview.tsx |  2 +-
+ apps/web/src/pages/PlanReview.tsx |  2 +-
+ apps/worker/package.json          |  3 +-
+ apps/worker/src/gate/approver.ts  |  2 +-
+ apps/worker/src/run-loop.ts       |  8 ++---
+ apps/worker/tsconfig.json         |  3 +-
+ packages/core/package.json        |  1 +
+ packages/core/src/gate-policy.ts  |  6 ++--
+ packages/core/src/index.ts        |  8 ++---
+ packages/db/package.json          |  3 +-
+ packages/db/src/index.ts          |  4 +--
+ packages/utils/package.json       |  3 +-
+ packages/utils/src/index.ts       |  4 +--
+ tsconfig.json                     |  4 +--
+ 24 files changed, 161 insertions(+), 77 deletions(-)
+diff --git a/apps/api/package.json b/apps/api/package.json
+index 62f9d3a..8f55d61 100644
+--- a/apps/api/package.json
++++ b/apps/api/package.json
+@@ -1,19 +1,20 @@
+ {
+   "name": "@aione/api",
+   "version": "0.1.0",
+   "private": true,
+   "type": "module",
+   "scripts": {
+     "dev": "node --import tsx/esm src/index.ts",
+     "build": "tsc",
+-    "type-check": "tsc --noEmit"
++    "type-check": "tsc --noEmit",
++    "lint": "eslint src --ext .ts"
+   },
+   "dependencies": {
+     "@aione/core": "workspace:*",
+     "@aione/db": "workspace:*",
+     "@aione/utils": "workspace:*",
+     "@hono/node-server": "^1.8.0",
+     "drizzle-orm": "^0.28.0",
+     "hono": "^3.11.0",
+     "dotenv": "^16.0.0"
+   },
+diff --git a/apps/api/src/handlers/events.ts b/apps/api/src/handlers/events.ts
+new file mode 100644
+index 0000000..099a9ac
+--- /dev/null
++++ b/apps/api/src/handlers/events.ts
+@@ -0,0 +1,34 @@
++import { Hono } from 'hono';
++import { eq } from 'drizzle-orm';
++import { db, runs } from '@aione/db';
++import { createLogger } from '@aione/utils';
++
++const logger = createLogger('api:events');
++const router = new Hono();
++
++// GET /events/:runId (SSE) — mounted at the top level in index.ts so the
++// real path is /events/:runId, matching apps/web/src/api.ts's streamRun().
++router.get('/:runId', async (c) => {
++  const runId = c.req.param('runId');
++
++  logger.info('sse connected', { runId });
++
++  return c.streamText(async (stream) => {
++    // Stub: stream the current run state once, then keep the connection
++    // alive with pings. Drizzle requires the eq() helper for .where() —
++    // passing a plain object matches nothing and silently returns [].
++    const [run] = await db.select().from(runs).where(eq(runs.id, runId));
++
++    if (run) {
++      await stream.write(`data: ${JSON.stringify({ type: 'run', run })}\n\n`);
++
++      // Keep connection alive
++      for (let i = 0; i < 30; i++) {
++        await new Promise((resolve) => setTimeout(resolve, 1000));
++        await stream.write(`data: ${JSON.stringify({ type: 'ping' })}\n\n`);
++      }
++    }
++  });
++});
++
++export default router;
+diff --git a/apps/api/src/handlers/gate.ts b/apps/api/src/handlers/gate.ts
+index 0c8e316..27fb154 100644
+--- a/apps/api/src/handlers/gate.ts
++++ b/apps/api/src/handlers/gate.ts
+@@ -1,13 +1,12 @@
+ import { Hono } from 'hono';
+-import { eq } from 'drizzle-orm';
+-import { db, runs, approvals } from '@aione/db';
++import { db, approvals } from '@aione/db';
+ import { createLogger } from '@aione/utils';
+ 
+ const logger = createLogger('api:gate');
+ const router = new Hono();
+ 
+ // POST /gate/plan-review
+ router.post('/plan-review', async (c) => {
+   try {
+     const body = await c.req.json();
+     const { runId, decision } = body;
+@@ -53,35 +52,11 @@ router.post('/diff-review', async (c) => {
+       })
+       .returning();
+ 
+     return c.json({ approved: true, approvalId: approval.id });
+   } catch (error) {
+     logger.error('error in diff-review', error instanceof Error ? error : { error: String(error) });
+     return c.json({ error: 'Internal server error' }, 500);
+   }
+ });
+ 
+-// GET /events/:runId (SSE)
+-router.get('/events/:runId', async (c) => {
+-  const runId = c.req.param('runId');
+-
+-  logger.info('sse connected', { runId });
+-
+-  return c.streamText(async (stream) => {
+-    // Stub: stream the current run state once, then keep the connection
+-    // alive with pings. Drizzle requires the eq() helper for .where() —
+-    // passing a plain object matches nothing and silently returns [].
+-    const [run] = await db.select().from(runs).where(eq(runs.id, runId));
+-
+-    if (run) {
+-      await stream.write(`data: ${JSON.stringify({ type: 'run', run })}\n\n`);
+-
+-      // Keep connection alive
+-      for (let i = 0; i < 30; i++) {
+-        await new Promise((resolve) => setTimeout(resolve, 1000));
+-        await stream.write(`data: ${JSON.stringify({ type: 'ping' })}\n\n`);
+-      }
+-    }
+-  });
+-});
+-
+ export default router;
+diff --git a/apps/api/src/handlers/runs.ts b/apps/api/src/handlers/runs.ts
+new file mode 100644
+index 0000000..ed95584
+--- /dev/null
++++ b/apps/api/src/handlers/runs.ts
+@@ -0,0 +1,70 @@
++import { Hono } from 'hono';
++import { db, runs, sessions, projects, workspaces } from '@aione/db';
++import { createLogger } from '@aione/utils';
++
++const logger = createLogger('api:runs');
++const router = new Hono();
++
++// Vertical-slice stub: there is no real auth/session-creation flow yet, so
++// we find-or-create a single stub workspace -> project -> session chain and
++// reuse its sessionId for every demo run. runs.sessionId has a NOT NULL FK
++// to sessions.id, so a bare random UUID would violate the constraint.
++let stubSessionId: string | null = null;
++
++async function ensureStubSession(): Promise<string> {
++  if (stubSessionId) {
++    return stubSessionId;
++  }
++
++  const [existingSession] = await db.select().from(sessions).limit(1);
++  if (existingSession) {
++    stubSessionId = existingSession.id;
++    return stubSessionId;
++  }
++
++  const [workspace] = await db
++    .insert(workspaces)
++    .values({ userId: 'stub-user', name: 'Stub Workspace' })
++    .returning();
++
++  const [project] = await db
++    .insert(projects)
++    .values({ workspaceId: workspace.id, name: 'Stub Project' })
++    .returning();
++
++  const [session] = await db
++    .insert(sessions)
++    .values({ projectId: project.id })
++    .returning();
++
++  stubSessionId = session.id;
++  return stubSessionId;
++}
++
++// POST /runs
++router.post('/', async (c) => {
++  try {
++    const body = await c.req.json();
++    const { prompt } = body;
++
++    logger.info('submit prompt', { prompt });
++
++    const sessionId = await ensureStubSession();
++
++    const [run] = await db
++      .insert(runs)
++      .values({
++        sessionId,
++        agent: 'orchestrator',
++        status: 'planning',
++      })
++      .returning();
++
++    return c.json(run);
++  } catch (error) {
++    logger.error('error in create run', error instanceof Error ? error : { error: String(error) });
++    return c.json({ error: 'Internal server error' }, 500);
++  }
++});
++
++export default router;
+diff --git a/apps/api/src/index.ts b/apps/api/src/index.ts
+index 83c7656..5b07d4f 100644
+--- a/apps/api/src/index.ts
++++ b/apps/api/src/index.ts
+@@ -1,16 +1,18 @@
+ import 'dotenv/config';
+ import { serve } from '@hono/node-server';
+ import { Hono } from 'hono';
+ import { createLogger } from '@aione/utils';
+-import gateRouter from './handlers/gate';
+-import { errorMiddleware } from './middleware/errors';
++import gateRouter from './handlers/gate.js';
++import eventsRouter from './handlers/events.js';
++import runsRouter from './handlers/runs.js';
++import { errorMiddleware } from './middleware/errors.js';
+ 
+ const logger = createLogger('api');
+ const app = new Hono();
+ 
+ // Middleware: request logging
+ app.use('*', async (c, next) => {
+   const start = Date.now();
+   await next();
+   const duration = Date.now() - start;
+   logger.debug('request', {
+@@ -18,20 +20,22 @@ app.use('*', async (c, next) => {
+     path: c.req.path,
+     status: c.res.status,
+     duration,
+   });
+ });
+ 
+ errorMiddleware(app);
+ 
+ // Routes
+ app.route('/gate', gateRouter);
++app.route('/events', eventsRouter);
++app.route('/runs', runsRouter);
+ 
+ // Health check
+ app.get('/health', (c) => c.json({ ok: true }));
+ 
+ // Start server
+ // Hono v3 has no built-in Node listener; @hono/node-server bridges the
+ // fetch-shaped app to an actual Node http.Server. Without this, "starting
+ // on port X" would only ever log — nothing would be listening.
+ const port = parseInt(process.env.API_PORT || '3001', 10);
+ logger.info(`api starting on port ${port}`);
+diff --git a/apps/api/tsconfig.json b/apps/api/tsconfig.json
+index aebadd1..c56b2fe 100644
+--- a/apps/api/tsconfig.json
++++ b/apps/api/tsconfig.json
+@@ -1,10 +1,9 @@
+ {
+   "extends": "../../tsconfig.json",
+   "compilerOptions": {
+     "outDir": "./dist",
+     "rootDir": "./src",
+-    "target": "ES2022",
+-    "module": "ESNext"
++    "target": "ES2022"
+   },
+   "include": ["src/**/*"]
+ }
+diff --git a/apps/web/package.json b/apps/web/package.json
+index a0ddd9b..f352622 100644
+--- a/apps/web/package.json
++++ b/apps/web/package.json
+@@ -1,20 +1,21 @@
+ {
+   "name": "@aione/web",
+   "version": "0.1.0",
+   "private": true,
+   "type": "module",
+   "scripts": {
+     "dev": "vite",
+     "build": "vite build",
+     "preview": "vite preview",
+-    "type-check": "tsc --noEmit"
++    "type-check": "tsc --noEmit",
++    "lint": "eslint src --ext .ts,.tsx"
+   },
+   "dependencies": {
+     "react": "^18.2.0",
+     "react-dom": "^18.2.0",
+     "@aione/core": "workspace:*"
+   },
+   "devDependencies": {
+     "@types/react": "^18.2.0",
+     "@types/react-dom": "^18.2.0",
+     "@vitejs/plugin-react": "^4.2.0",
+diff --git a/apps/web/src/App.tsx b/apps/web/src/App.tsx
+index 137748e..d2e79c8 100644
+--- a/apps/web/src/App.tsx
++++ b/apps/web/src/App.tsx
+@@ -1,34 +1,31 @@
+ import { useState } from 'react';
+-import { Run } from '@aione/core';
+-import PlanReview from './pages/PlanReview';
+-import DiffReview from './pages/DiffReview';
++import { submitPrompt } from './api.js';
++import { useRun } from './hooks/useRun.js';
++import PlanReview from './pages/PlanReview.js';
++import DiffReview from './pages/DiffReview.js';
+ 
+ function App() {
+-  const [run, setRun] = useState<Run | null>(null);
++  const [runId, setRunId] = useState<string | null>(null);
++  const run = useRun(runId);
+ 
+-  if (!run) {
++  const handleStart = async () => {
++    const created = await submitPrompt('demo prompt');
++    setRunId(created.id);
++  };
++
++  if (!runId || !run) {
+     return (
+       <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
+         <h1>AIOne - Vertical Slice</h1>
+         <button
+-          onClick={() =>
+-            setRun({
+-              id: 'stub-run-1' as any,
+-              sessionId: 'stub-session-1' as any,
+-              agent: 'orchestrator',
+-              status: 'planning',
+-              approvals: [],
+-              createdAt: new Date(),
+-              updatedAt: new Date(),
+-            })
+-          }
++          onClick={handleStart}
+           style={{
+             padding: '0.5rem 1rem',
+             fontSize: '1rem',
+             cursor: 'pointer',
+             backgroundColor: '#0066cc',
+             color: 'white',
+             border: 'none',
+             borderRadius: '4px',
+           }}
+         >
+@@ -37,20 +34,20 @@ function App() {
+       </div>
+     );
+   }
+ 
+   if (run.status === 'planning' || run.status === 'awaiting_approval') {
+     if (!run.plan) {
+       return <div>Loading plan...</div>;
+     }
+ 
+     if (!run.diff) {
+-      return <PlanReview run={run} onApprove={() => setRun({ ...run, status: 'awaiting_approval' })} />;
++      return <PlanReview run={run} onApprove={() => {}} />;
+     }
+ 
+-    return <DiffReview run={run} onApprove={() => setRun({ ...run, status: 'done' })} />;
++    return <DiffReview run={run} onApprove={() => {}} />;
+   }
+ 
+   return <div>Run completed!</div>;
+ }
+ 
+ export default App;
+diff --git a/apps/web/src/hooks/useRun.ts b/apps/web/src/hooks/useRun.ts
+index e8b98a7..d574fa0 100644
+--- a/apps/web/src/hooks/useRun.ts
++++ b/apps/web/src/hooks/useRun.ts
+@@ -1,13 +1,13 @@
+ import { useState, useEffect } from 'react';
+ import { Run } from '@aione/core';
+-import { streamRun } from '../api';
++import { streamRun } from '../api.js';
+ 
+ export function useRun(runId: string | null) {
+   const [run, setRun] = useState<Run | null>(null);
+ 
+   useEffect(() => {
+     if (!runId) return;
+ 
+     const unsubscribe = streamRun(runId, (event) => {
+       if (event.type === 'run') {
+         setRun(event.run);
+diff --git a/apps/web/src/main.tsx b/apps/web/src/main.tsx
+index c018515..124f397 100644
+--- a/apps/web/src/main.tsx
++++ b/apps/web/src/main.tsx
+@@ -1,9 +1,9 @@
+ import React from 'react';
+ import ReactDOM from 'react-dom/client';
+-import App from './App';
++import App from './App.js';
+ 
+ ReactDOM.createRoot(document.getElementById('root')!).render(
+   <React.StrictMode>
+     <App />
+   </React.StrictMode>,
+ );
+diff --git a/apps/web/src/pages/DiffReview.tsx b/apps/web/src/pages/DiffReview.tsx
+index f44f926..daf92a4 100644
+--- a/apps/web/src/pages/DiffReview.tsx
++++ b/apps/web/src/pages/DiffReview.tsx
+@@ -1,12 +1,12 @@
+ import { Run } from '@aione/core';
+-import { approveDiff } from '../api';
++import { approveDiff } from '../api.js';
+ 
+ interface DiffReviewProps {
+   run: Run;
+   onApprove: () => void;
+ }
+ 
+ export default function DiffReview({ run, onApprove }: DiffReviewProps) {
+   const handleApprove = async () => {
+     await approveDiff(run.id);
+     onApprove();
+diff --git a/apps/web/src/pages/PlanReview.tsx b/apps/web/src/pages/PlanReview.tsx
+index 3d4db88..4e2f25a 100644
+--- a/apps/web/src/pages/PlanReview.tsx
++++ b/apps/web/src/pages/PlanReview.tsx
+@@ -1,12 +1,12 @@
+ import { Run } from '@aione/core';
+-import { approvePlan } from '../api';
++import { approvePlan } from '../api.js';
+ 
+ interface PlanReviewProps {
+   run: Run;
+   onApprove: () => void;
+ }
+ 
+ export default function PlanReview({ run, onApprove }: PlanReviewProps) {
+   const handleApprove = async () => {
+     await approvePlan(run.id);
+     onApprove();
+diff --git a/apps/worker/package.json b/apps/worker/package.json
+index 59bffde..ca3d063 100644
+--- a/apps/worker/package.json
++++ b/apps/worker/package.json
+@@ -1,19 +1,20 @@
+ {
+   "name": "@aione/worker",
+   "version": "0.1.0",
+   "private": true,
+   "type": "module",
+   "scripts": {
+     "dev": "node --loader tsx/esm src/index.ts",
+     "build": "tsc",
+-    "type-check": "tsc --noEmit"
++    "type-check": "tsc --noEmit",
++    "lint": "eslint src --ext .ts"
+   },
+   "dependencies": {
+     "@aione/core": "workspace:*",
+     "@aione/db": "workspace:*",
+     "@aione/utils": "workspace:*",
+     "dotenv": "^16.0.0",
+     "drizzle-orm": "^0.28.0"
+   },
+   "devDependencies": {
+     "@types/node": "^20.0.0",
+diff --git a/apps/worker/src/gate/approver.ts b/apps/worker/src/gate/approver.ts
+index 3891871..3774f5b 100644
+--- a/apps/worker/src/gate/approver.ts
++++ b/apps/worker/src/gate/approver.ts
+@@ -1,14 +1,14 @@
+ import { ApprovalToken, ActionClass, getDecision } from '@aione/core';
+ import { db, approvals } from '@aione/db';
+ import { createLogger, GateError } from '@aione/utils';
+-import type { WorkerRun } from '../types';
++import type { WorkerRun } from '../types.js';
+ 
+ const logger = createLogger('gate:approver');
+ 
+ export async function requestApproval(
+   run: WorkerRun,
+   actionClass: ActionClass,
+   actionSummary: string,
+ ): Promise<ApprovalToken> {
+   const decision = getDecision(actionClass, run.trustTier);
+ 
+diff --git a/apps/worker/src/run-loop.ts b/apps/worker/src/run-loop.ts
+index b4b336c..3621c6f 100644
+--- a/apps/worker/src/run-loop.ts
++++ b/apps/worker/src/run-loop.ts
+@@ -1,18 +1,18 @@
+ import { Diff } from '@aione/core';
+ import { db, runs } from '@aione/db';
+ import { createLogger } from '@aione/utils';
+ import { eq } from 'drizzle-orm';
+-import { planFromPrompt } from './orchestrator';
+-import { classifyActionSafely } from './gate/classifier';
+-import { requestApproval } from './gate/approver';
+-import type { WorkerRun } from './types';
++import { planFromPrompt } from './orchestrator/index.js';
++import { classifyActionSafely } from './gate/classifier.js';
++import { requestApproval } from './gate/approver.js';
++import type { WorkerRun } from './types.js';
+ 
+ const logger = createLogger('run-loop');
+ 
+ export async function processRun(run: WorkerRun): Promise<void> {
+   logger.info('processing run', { runId: run.id, status: run.status });
+ 
+   try {
+     // Stub: generate a plan
+     if (!run.plan && run.status === 'planning') {
+       const plan = await planFromPrompt('stub prompt');
+diff --git a/apps/worker/tsconfig.json b/apps/worker/tsconfig.json
+index aebadd1..c56b2fe 100644
+--- a/apps/worker/tsconfig.json
++++ b/apps/worker/tsconfig.json
+@@ -1,10 +1,9 @@
+ {
+   "extends": "../../tsconfig.json",
+   "compilerOptions": {
+     "outDir": "./dist",
+     "rootDir": "./src",
+-    "target": "ES2022",
+-    "module": "ESNext"
++    "target": "ES2022"
+   },
+   "include": ["src/**/*"]
+ }
+diff --git a/packages/core/package.json b/packages/core/package.json
+index 6781150..3f02f59 100644
+--- a/packages/core/package.json
++++ b/packages/core/package.json
+@@ -2,16 +2,17 @@
+   "name": "@aione/core",
+   "version": "0.1.0",
+   "private": true,
+   "type": "module",
+   "exports": {
+     ".": "./dist/index.js"
+   },
+   "scripts": {
+     "build": "tsc",
+     "type-check": "tsc --noEmit",
++    "lint": "eslint src --ext .ts",
+     "dev": "tsc --watch"
+   },
+   "devDependencies": {
+     "typescript": "^5.3.0"
+   }
+ }
+diff --git a/packages/core/src/gate-policy.ts b/packages/core/src/gate-policy.ts
+index 68ee194..842bd2e 100644
+--- a/packages/core/src/gate-policy.ts
++++ b/packages/core/src/gate-policy.ts
+@@ -1,25 +1,25 @@
+-import { TrustTier } from './types';
+-import { ActionClass } from './action-class';
++import { TrustTier } from './types.js';
++import { ActionClass } from './action-class.js';
+ 
+ export type GateDecision = 'auto' | 'confirm' | 'deny';
+ 
+ export const gatePolicy: Record<ActionClass, Record<TrustTier, GateDecision>> = {
+   read: { cautious: 'auto', balanced: 'auto', autonomous: 'auto' },
+   file_write: { cautious: 'confirm', balanced: 'auto', autonomous: 'auto' },
+   terminal_read: { cautious: 'auto', balanced: 'auto', autonomous: 'auto' },
+   terminal_mutating: { cautious: 'confirm', balanced: 'confirm', autonomous: 'auto' },
+   git_local: { cautious: 'auto', balanced: 'auto', autonomous: 'auto' },
+   push: { cautious: 'confirm', balanced: 'confirm', autonomous: 'confirm' },
+   merge: { cautious: 'confirm', balanced: 'confirm', autonomous: 'confirm' },
+   registry_push: { cautious: 'confirm', balanced: 'confirm', autonomous: 'confirm' },
+   deploy: { cautious: 'confirm', balanced: 'confirm', autonomous: 'confirm' },
+-  docker_build: { cautious: 'confirm', balanced: 'confirm', autonomous: 'auto' },
++  docker_build: { cautious: 'auto', balanced: 'auto', autonomous: 'auto' },
+   destructive: { cautious: 'confirm', balanced: 'confirm', autonomous: 'confirm' },
+ };
+ 
+ export function getDecision(
+   actionClass: ActionClass,
+   tier: TrustTier,
+ ): GateDecision {
+   return gatePolicy[actionClass][tier];
+ }
+diff --git a/packages/core/src/index.ts b/packages/core/src/index.ts
+index 97e66a0..13fdd73 100644
+--- a/packages/core/src/index.ts
++++ b/packages/core/src/index.ts
+@@ -1,4 +1,4 @@
+-export * from './types';
+-export * from './action-class';
+-export * from './approval-token';
+-export * from './gate-policy';
++export * from './types.js';
++export * from './action-class.js';
++export * from './approval-token.js';
++export * from './gate-policy.js';
+diff --git a/packages/db/package.json b/packages/db/package.json
+index ba07f4a..8dc754f 100644
+--- a/packages/db/package.json
++++ b/packages/db/package.json
+@@ -3,21 +3,22 @@
+   "version": "0.1.0",
+   "private": true,
+   "type": "module",
+   "exports": {
+     ".": "./dist/index.js"
+   },
+   "scripts": {
+     "build": "tsc",
+     "migrate": "drizzle-kit push:pg",
+     "generate": "drizzle-kit generate:pg",
+-    "type-check": "tsc --noEmit"
++    "type-check": "tsc --noEmit",
++    "lint": "eslint src --ext .ts"
+   },
+   "dependencies": {
+     "@aione/core": "workspace:*",
+     "postgres": "^3.4.0",
+     "drizzle-orm": "^0.28.0"
+   },
+   "devDependencies": {
+     "@types/node": "^20.0.0",
+     "drizzle-kit": "^0.20.0",
+     "typescript": "^5.3.0"
+diff --git a/packages/db/src/index.ts b/packages/db/src/index.ts
+index c1318b4..14cd49f 100644
+--- a/packages/db/src/index.ts
++++ b/packages/db/src/index.ts
+@@ -1,9 +1,9 @@
+ import { drizzle } from 'drizzle-orm/postgres-js';
+ import postgres from 'postgres';
+-import * as schema from './schema';
++import * as schema from './schema.js';
+ 
+ const connectionString = process.env.DATABASE_URL || 'postgres://aione:password@localhost:5432/aione';
+ const client = postgres(connectionString);
+ export const db = drizzle(client, { schema });
+ 
+-export * from './schema';
++export * from './schema.js';
+diff --git a/packages/utils/package.json b/packages/utils/package.json
+index 671016c..793fb9b 100644
+--- a/packages/utils/package.json
++++ b/packages/utils/package.json
+@@ -1,16 +1,17 @@
+ {
+   "name": "@aione/utils",
+   "version": "0.1.0",
+   "private": true,
+   "type": "module",
+   "exports": {
+     ".": "./dist/index.js"
+   },
+   "scripts": {
+     "build": "tsc",
+-    "type-check": "tsc --noEmit"
++    "type-check": "tsc --noEmit",
++    "lint": "eslint src --ext .ts"
+   },
+   "devDependencies": {
+     "typescript": "^5.3.0"
+   }
+ }
+diff --git a/packages/utils/src/index.ts b/packages/utils/src/index.ts
+index 9927afa..912af53 100644
+--- a/packages/utils/src/index.ts
++++ b/packages/utils/src/index.ts
+@@ -1,2 +1,2 @@
+-export { createLogger, type LogLevel } from './logger';
+-export { AppError, ValidationError, NotFoundError, UnauthorizedError, GateError } from './errors';
++export { createLogger, type LogLevel } from './logger.js';
++export { AppError, ValidationError, NotFoundError, UnauthorizedError, GateError } from './errors.js';
+diff --git a/tsconfig.json b/tsconfig.json
+index eb3d279..6ee6fec 100644
+--- a/tsconfig.json
++++ b/tsconfig.json
+@@ -1,16 +1,16 @@
+ {
+   "compilerOptions": {
+     "target": "ES2022",
+-    "module": "ESNext",
++    "module": "nodenext",
+     "lib": ["ES2022", "DOM"],
+-    "moduleResolution": "bundler",
++    "moduleResolution": "nodenext",
+     "strict": true,
+     "resolveJsonModule": true,
+     "declaration": true,
+     "declarationMap": true,
+     "sourceMap": true,
+     "noEmitOnError": true,
+     "noUnusedLocals": true,
+     "noUnusedParameters": true,
+     "noImplicitReturns": true,
+     "skipLibCheck": true,

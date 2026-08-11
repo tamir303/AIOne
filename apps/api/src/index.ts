@@ -1,10 +1,12 @@
 import 'dotenv/config';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
+import { clerkMiddleware } from '@clerk/hono';
 import { createLogger } from '@aione/utils';
 import gateRouter from './handlers/gate.js';
 import eventsRouter from './handlers/events.js';
 import runsRouter from './handlers/runs.js';
+import workspacesRouter, { projectsRouter } from './handlers/workspaces.js';
 import { errorMiddleware } from './middleware/errors.js';
 
 const logger = createLogger('api');
@@ -23,12 +25,19 @@ app.use('*', async (c, next) => {
   });
 });
 
+// Attaches Clerk auth info to context for every route via getAuth(c); it
+// does not itself require a signed-in user — each handler that needs one
+// checks getAuth(c).userId and returns 401 on its own.
+app.use('*', clerkMiddleware());
+
 errorMiddleware(app);
 
 // Routes
 app.route('/gate', gateRouter);
 app.route('/events', eventsRouter);
 app.route('/runs', runsRouter);
+app.route('/workspaces', workspacesRouter);
+app.route('/projects', projectsRouter);
 
 // Health check
 app.get('/health', (c) => c.json({ ok: true }));

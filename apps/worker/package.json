@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node --loader tsx/esm src/index.ts",
+    "dev": "node --import tsx/esm src/index.ts",
     "build": "tsc",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts"
@@ -14,7 +14,7 @@
     "@aione/db": "workspace:*",
     "@aione/utils": "workspace:*",
     "dotenv": "^16.0.0",
-    "drizzle-orm": "^0.28.0"
+    "drizzle-orm": "^0.29.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
