@@ -1,0 +1,25 @@
+{
+  "name": "@aione/db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "migrate": "drizzle-kit push:pg",
+    "generate": "drizzle-kit generate:pg",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aione/core": "workspace:*",
+    "postgres": "^3.4.0",
+    "drizzle-orm": "^0.28.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "drizzle-kit": "^0.20.0",
+    "typescript": "^5.3.0"
+  }
+}
