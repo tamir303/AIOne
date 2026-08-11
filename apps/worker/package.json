@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node --loader tsx/esm src/index.ts",
     "build": "tsc",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts"
   },
   "dependencies": {
     "@aione/core": "workspace:*",

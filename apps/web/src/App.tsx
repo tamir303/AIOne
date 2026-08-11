@@ -1,27 +1,24 @@
 import { useState } from 'react';
-import { Run } from '@aione/core';
-import PlanReview from './pages/PlanReview';
-import DiffReview from './pages/DiffReview';
+import { submitPrompt } from './api.js';
+import { useRun } from './hooks/useRun.js';
+import PlanReview from './pages/PlanReview.js';
+import DiffReview from './pages/DiffReview.js';
 
 function App() {
-  const [run, setRun] = useState<Run | null>(null);
+  const [runId, setRunId] = useState<string | null>(null);
+  const run = useRun(runId);
 
-  if (!run) {
+  const handleStart = async () => {
+    const created = await submitPrompt('demo prompt');
+    setRunId(created.id);
+  };
+
+  if (!runId || !run) {
     return (
       <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
         <h1>AIOne - Vertical Slice</h1>
         <button
-          onClick={() =>
-            setRun({
-              id: 'stub-run-1' as any,
-              sessionId: 'stub-session-1' as any,
-              agent: 'orchestrator',
-              status: 'planning',
-              approvals: [],
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            })
-          }
+          onClick={handleStart}
           style={{
             padding: '0.5rem 1rem',
             fontSize: '1rem',
@@ -44,10 +41,10 @@ function App() {
     }
 
     if (!run.diff) {
-      return <PlanReview run={run} onApprove={() => setRun({ ...run, status: 'awaiting_approval' })} />;
+      return <PlanReview run={run} onApprove={() => {}} />;
     }
 
-    return <DiffReview run={run} onApprove={() => setRun({ ...run, status: 'done' })} />;
+    return <DiffReview run={run} onApprove={() => {}} />;
   }
 
   return <div>Run completed!</div>;

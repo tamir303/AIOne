@@ -2,10 +2,10 @@ import { Diff } from '@aione/core';
 import { db, runs } from '@aione/db';
 import { createLogger } from '@aione/utils';
 import { eq } from 'drizzle-orm';
-import { planFromPrompt } from './orchestrator';
-import { classifyActionSafely } from './gate/classifier';
-import { requestApproval } from './gate/approver';
-import type { WorkerRun } from './types';
+import { planFromPrompt } from './orchestrator/index.js';
+import { classifyActionSafely } from './gate/classifier.js';
+import { requestApproval } from './gate/approver.js';
+import type { WorkerRun } from './types.js';
 
 const logger = createLogger('run-loop');
 

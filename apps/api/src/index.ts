@@ -2,8 +2,10 @@ import 'dotenv/config';
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { createLogger } from '@aione/utils';
-import gateRouter from './handlers/gate';
-import { errorMiddleware } from './middleware/errors';
+import gateRouter from './handlers/gate.js';
+import eventsRouter from './handlers/events.js';
+import runsRouter from './handlers/runs.js';
+import { errorMiddleware } from './middleware/errors.js';
 
 const logger = createLogger('api');
 const app = new Hono();
@@ -25,6 +27,8 @@ errorMiddleware(app);
 
 // Routes
 app.route('/gate', gateRouter);
+app.route('/events', eventsRouter);
+app.route('/runs', runsRouter);
 
 // Health check
 app.get('/health', (c) => c.json({ ok: true }));

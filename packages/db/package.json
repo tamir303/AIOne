@@ -10,7 +10,8 @@
     "build": "tsc",
     "migrate": "drizzle-kit push:pg",
     "generate": "drizzle-kit generate:pg",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src --ext .ts"
   },
   "dependencies": {
     "@aione/core": "workspace:*",

@@ -1,5 +1,5 @@
 import { Run } from '@aione/core';
-import { approvePlan } from '../api';
+import { approvePlan } from '../api.js';
 
 interface PlanReviewProps {
   run: Run;

@@ -1,7 +1,7 @@
 import { ApprovalToken, ActionClass, getDecision } from '@aione/core';
 import { db, approvals } from '@aione/db';
 import { createLogger, GateError } from '@aione/utils';
-import type { WorkerRun } from '../types';
+import type { WorkerRun } from '../types.js';
 
 const logger = createLogger('gate:approver');
 

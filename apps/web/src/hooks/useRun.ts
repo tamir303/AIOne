@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Run } from '@aione/core';
-import { streamRun } from '../api';
+import { streamRun } from '../api.js';
 
 export function useRun(runId: string | null) {
   const [run, setRun] = useState<Run | null>(null);

@@ -1,5 +1,5 @@
 import { Run } from '@aione/core';
-import { approveDiff } from '../api';
+import { approveDiff } from '../api.js';
 
 interface DiffReviewProps {
   run: Run;
