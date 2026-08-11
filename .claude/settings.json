@@ -82,7 +82,10 @@
   "enableAllProjectMcpServers": false,
   "enabledMcpjsonServers": [
     "filesystem",
-    "github"
+    "github",
+    "fly",
+    "registry",
+    "supabase"
   ],
   "includeCoAuthoredBy": true,
   "cleanupPeriodDays": 60

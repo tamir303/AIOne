@@ -1,0 +1,381 @@
+caaf9bf feat: worker with gate layer and run processing
+ .env.example                          |  15 +++++
+ apps/worker/package.json              |  23 ++++++++
+ apps/worker/src/gate/approver.ts      |  67 +++++++++++++++++++++++
+ apps/worker/src/gate/classifier.ts    |  24 ++++++++
+ apps/worker/src/index.ts              |  21 +++++++
+ apps/worker/src/orchestrator/index.ts |  28 ++++++++++
+ apps/worker/src/run-loop.ts           | 100 ++++++++++++++++++++++++++++++++++
+ apps/worker/src/types.ts              |  11 ++++
+ apps/worker/tsconfig.json             |  10 ++++
+ pnpm-lock.yaml                        | Bin 0 -> 74977 bytes
+ pnpm-workspace.yaml                   |   3 +
+ 11 files changed, 302 insertions(+)
+diff --git a/.env.example b/.env.example
+new file mode 100644
+index 0000000..7a4dcc5
+--- /dev/null
++++ b/.env.example
+@@ -0,0 +1,15 @@
++# Database
++DATABASE_URL=postgres://aione:password@localhost:5432/aione
++
++# Worker
++WORKER_PORT=3002
++
++# API
++API_PORT=3001
++API_URL=http://localhost:3001
++
++# Clerk (optional for vertical slice)
++CLERK_SECRET_KEY=
++
++# MCP (stub for Phase 2+)
++GITHUB_MCP_TOKEN=
+diff --git a/apps/worker/package.json b/apps/worker/package.json
+new file mode 100644
+index 0000000..59bffde
+--- /dev/null
++++ b/apps/worker/package.json
+@@ -0,0 +1,23 @@
++{
++  "name": "@aione/worker",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "scripts": {
++    "dev": "node --loader tsx/esm src/index.ts",
++    "build": "tsc",
++    "type-check": "tsc --noEmit"
++  },
++  "dependencies": {
++    "@aione/core": "workspace:*",
++    "@aione/db": "workspace:*",
++    "@aione/utils": "workspace:*",
++    "dotenv": "^16.0.0",
++    "drizzle-orm": "^0.28.0"
++  },
++  "devDependencies": {
++    "@types/node": "^20.0.0",
++    "tsx": "^4.0.0",
++    "typescript": "^5.3.0"
++  }
++}
+diff --git a/apps/worker/src/gate/approver.ts b/apps/worker/src/gate/approver.ts
+new file mode 100644
+index 0000000..3891871
+--- /dev/null
++++ b/apps/worker/src/gate/approver.ts
+@@ -0,0 +1,67 @@
++import { ApprovalToken, ActionClass, getDecision } from '@aione/core';
++import { db, approvals } from '@aione/db';
++import { createLogger, GateError } from '@aione/utils';
++import type { WorkerRun } from '../types';
++
++const logger = createLogger('gate:approver');
++
++export async function requestApproval(
++  run: WorkerRun,
++  actionClass: ActionClass,
++  actionSummary: string,
++): Promise<ApprovalToken> {
++  const decision = getDecision(actionClass, run.trustTier);
++
++  logger.info('requesting approval', {
++    runId: run.id,
++    actionClass,
++    decision,
++    tier: run.trustTier,
++  });
++
++  if (decision === 'deny') {
++    throw new GateError(`Action ${actionClass} is denied in tier ${run.trustTier}`);
++  }
++
++  if (decision === 'auto') {
++    // Auto-approve: create an approval record immediately. The record is
++    // still written — auto-approval means "no human confirmation required",
++    // not "no audit trail".
++    const [approval] = await db
++      .insert(approvals)
++      .values({
++        runId: run.id,
++        actionClass,
++        actionSummary,
++        decision: 'approved',
++        tier: run.trustTier,
++      })
++      .returning();
++
++    logger.info('auto-approved', { runId: run.id, approvalId: approval.id });
++    return ApprovalToken.create(run.id);
++  }
++
++  // decision === 'confirm'
++  // In the vertical slice, we stub the human approval.
++  // In Phase 2+, this waits on a webhook from the API triggered by the
++  // web UI's plan-review / diff-review screens.
++  logger.info('awaiting human approval', { runId: run.id });
++
++  // Stub: approve after 1 second (for testing)
++  await new Promise((resolve) => setTimeout(resolve, 1000));
++
++  const [approval] = await db
++    .insert(approvals)
++    .values({
++      runId: run.id,
++      actionClass,
++      actionSummary,
++      decision: 'approved',
++      tier: run.trustTier,
++    })
++    .returning();
++
++  logger.info('human approved', { runId: run.id, approvalId: approval.id });
++  return ApprovalToken.create(run.id);
++}
+diff --git a/apps/worker/src/gate/classifier.ts b/apps/worker/src/gate/classifier.ts
+new file mode 100644
+index 0000000..0e8749a
+--- /dev/null
++++ b/apps/worker/src/gate/classifier.ts
+@@ -0,0 +1,24 @@
++import { ActionClass, classifyAction } from '@aione/core';
++import { createLogger } from '@aione/utils';
++
++const logger = createLogger('gate:classifier');
++
++export function classifyActionSafely(action: {
++  type: string;
++  command?: string;
++  details?: Record<string, any>;
++}): ActionClass {
++  try {
++    const classified = classifyAction(action);
++    logger.debug('classified action', { type: action.type, result: classified });
++    return classified;
++  } catch (error) {
++    // Fail closed: unknown or malformed actions are treated as destructive,
++    // which forces confirmation under every trust tier.
++    logger.error(
++      'error classifying action, defaulting to destructive',
++      error instanceof Error ? error : { error: String(error) },
++    );
++    return 'destructive';
++  }
++}
+diff --git a/apps/worker/src/index.ts b/apps/worker/src/index.ts
+new file mode 100644
+index 0000000..1a114ec
+--- /dev/null
++++ b/apps/worker/src/index.ts
+@@ -0,0 +1,21 @@
++import 'dotenv/config';
++import { createLogger } from '@aione/utils';
++
++const logger = createLogger('worker');
++
++async function main() {
++  logger.info('worker starting');
++
++  // Stub: in Phase 2+, this polls for Runs from the database and calls
++  // processRun() from ./run-loop for each one that needs work.
++  // For now, just log that it started.
++  logger.info('worker ready');
++
++  // Keep running
++  await new Promise(() => {});
++}
++
++main().catch((error) => {
++  logger.error('worker crashed', error);
++  process.exit(1);
++});
+diff --git a/apps/worker/src/orchestrator/index.ts b/apps/worker/src/orchestrator/index.ts
+new file mode 100644
+index 0000000..3904618
+--- /dev/null
++++ b/apps/worker/src/orchestrator/index.ts
+@@ -0,0 +1,28 @@
++import { Plan } from '@aione/core';
++import { createLogger } from '@aione/utils';
++
++const logger = createLogger('orchestrator');
++
++/**
++ * Stub orchestrator for the vertical slice. Replaced in Phase 2 by the real
++ * agent that turns a prompt into a reviewable Plan via the model provider
++ * abstraction (never a direct `@anthropic-ai/sdk` import — see CLAUDE.md).
++ */
++export async function planFromPrompt(prompt: string): Promise<Plan> {
++  logger.info('planning', { promptLength: prompt.length });
++
++  // Stub: return a fake plan
++  return {
++    steps: [
++      {
++        role: 'backend',
++        description: 'Create an API endpoint for the new feature',
++      },
++      {
++        role: 'frontend',
++        description: 'Add UI components to call the endpoint',
++      },
++    ],
++    rationale: 'This is a stub plan from the vertical slice.',
++  };
++}
+diff --git a/apps/worker/src/run-loop.ts b/apps/worker/src/run-loop.ts
+new file mode 100644
+index 0000000..b4b336c
+--- /dev/null
++++ b/apps/worker/src/run-loop.ts
+@@ -0,0 +1,100 @@
++import { Diff } from '@aione/core';
++import { db, runs } from '@aione/db';
++import { createLogger } from '@aione/utils';
++import { eq } from 'drizzle-orm';
++import { planFromPrompt } from './orchestrator';
++import { classifyActionSafely } from './gate/classifier';
++import { requestApproval } from './gate/approver';
++import type { WorkerRun } from './types';
++
++const logger = createLogger('run-loop');
++
++export async function processRun(run: WorkerRun): Promise<void> {
++  logger.info('processing run', { runId: run.id, status: run.status });
++
++  try {
++    // Stub: generate a plan
++    if (!run.plan && run.status === 'planning') {
++      const plan = await planFromPrompt('stub prompt');
++
++      await db
++        .update(runs)
++        .set({
++          plan,
++          status: 'awaiting_approval',
++          updatedAt: new Date(),
++        })
++        .where(eq(runs.id, run.id));
++
++      logger.info('plan generated', { runId: run.id });
++
++      // Classify the action, then request approval through the gate.
++      // Every state-changing step goes through classify -> requestApproval;
++      // there is no path that writes a plan without it.
++      const planActionClass = classifyActionSafely({ type: 'file_write' });
++      await requestApproval(
++        { ...run, plan, status: 'awaiting_approval' },
++        planActionClass,
++        'Plan generated: will create backend API and frontend UI',
++      );
++
++      logger.info('plan approved', { runId: run.id });
++    }
++
++    // Stub: generate a diff
++    if (run.plan && !run.diff) {
++      const diff: Diff = {
++        files: [
++          { path: 'api/routes/feature.ts', added: 50, removed: 0 },
++          { path: 'components/Feature.tsx', added: 30, removed: 0 },
++        ],
++        summary: 'Added feature endpoints and UI components',
++      };
++
++      await db
++        .update(runs)
++        .set({
++          diff,
++          status: 'awaiting_approval',
++          updatedAt: new Date(),
++        })
++        .where(eq(runs.id, run.id));
++
++      logger.info('diff generated', { runId: run.id });
++
++      const diffActionClass = classifyActionSafely({ type: 'file_write' });
++      await requestApproval(
++        { ...run, diff, status: 'awaiting_approval' },
++        diffActionClass,
++        'Diff: 80 lines added across 2 files',
++      );
++
++      logger.info('diff approved', { runId: run.id });
++    }
++
++    // Mark done
++    if (run.plan && run.diff) {
++      await db
++        .update(runs)
++        .set({
++          status: 'done',
++          updatedAt: new Date(),
++        })
++        .where(eq(runs.id, run.id));
++
++      logger.info('run completed', { runId: run.id });
++    }
++  } catch (error) {
++    logger.error(
++      'error processing run',
++      error instanceof Error ? error : { error: String(error) },
++    );
++    await db
++      .update(runs)
++      .set({
++        status: 'failed',
++        updatedAt: new Date(),
++      })
++      .where(eq(runs.id, run.id));
++  }
++}
+diff --git a/apps/worker/src/types.ts b/apps/worker/src/types.ts
+new file mode 100644
+index 0000000..b0e96ea
+--- /dev/null
++++ b/apps/worker/src/types.ts
+@@ -0,0 +1,11 @@
++import type { Run as CoreRun, TrustTier } from '@aione/core';
++
++/**
++ * The worker operates on Runs enriched with the trust tier of their owning
++ * Project. `@aione/core`'s `Run` type does not carry `trustTier` directly —
++ * it lives on `Project` — so the gate layer (which decides auto/confirm/deny
++ * per tier) needs the caller to resolve and attach it. Once Task 6/7 wire up
++ * real Session -> Project lookups, this becomes the shape returned by that
++ * join. For the vertical slice, callers construct it directly.
++ */
++export type WorkerRun = CoreRun & { trustTier: TrustTier };
+diff --git a/apps/worker/tsconfig.json b/apps/worker/tsconfig.json
+new file mode 100644
+index 0000000..aebadd1
+--- /dev/null
++++ b/apps/worker/tsconfig.json
+@@ -0,0 +1,10 @@
++{
++  "extends": "../../tsconfig.json",
++  "compilerOptions": {
++    "outDir": "./dist",
++    "rootDir": "./src",
++    "target": "ES2022",
++    "module": "ESNext"
++  },
++  "include": ["src/**/*"]
++}
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+new file mode 100644
+index 0000000..6697ff9
+Binary files /dev/null and b/pnpm-lock.yaml differ
+diff --git a/pnpm-workspace.yaml b/pnpm-workspace.yaml
+index e9b0dad..6f249dc 100644
+--- a/pnpm-workspace.yaml
++++ b/pnpm-workspace.yaml
+@@ -1,3 +1,6 @@
+ packages:
+   - 'apps/*'
+   - 'packages/*'
++allowBuilds:
++  es5-ext: true
++  esbuild: true

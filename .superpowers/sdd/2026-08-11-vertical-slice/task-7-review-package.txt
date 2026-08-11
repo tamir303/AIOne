@@ -1,0 +1,372 @@
+70c7d94 feat: Vite SPA with plan and diff review screens
+ apps/web/index.html               |  17 ++++++++++++
+ apps/web/package.json             |  24 ++++++++++++++++
+ apps/web/src/App.tsx              |  56 ++++++++++++++++++++++++++++++++++++++
+ apps/web/src/api.ts               |  47 ++++++++++++++++++++++++++++++++
+ apps/web/src/hooks/useRun.ts      |  21 ++++++++++++++
+ apps/web/src/main.tsx             |   9 ++++++
+ apps/web/src/pages/DiffReview.tsx |  49 +++++++++++++++++++++++++++++++++
+ apps/web/src/pages/PlanReview.tsx |  49 +++++++++++++++++++++++++++++++++
+ apps/web/tsconfig.json            |   8 ++++++
+ apps/web/vite.config.ts           |  16 +++++++++++
+ pnpm-lock.yaml                    | Bin 76097 -> 111216 bytes
+ 11 files changed, 296 insertions(+)
+diff --git a/apps/web/index.html b/apps/web/index.html
+new file mode 100644
+index 0000000..6902ee3
+--- /dev/null
++++ b/apps/web/index.html
+@@ -0,0 +1,17 @@
++<!doctype html>
++<html lang="en">
++  <head>
++    <meta charset="UTF-8" />
++    <meta name="viewport" content="width=device-width, initial-scale=1" />
++    <title>AIOne</title>
++    <style>
++      * { margin: 0; padding: 0; box-sizing: border-box; }
++      body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto; background: #f5f5f5; }
++      #root { min-height: 100vh; }
++    </style>
++  </head>
++  <body>
++    <div id="root"></div>
++    <script type="module" src="/src/main.tsx"></script>
++  </body>
++</html>
+diff --git a/apps/web/package.json b/apps/web/package.json
+new file mode 100644
+index 0000000..a0ddd9b
+--- /dev/null
++++ b/apps/web/package.json
+@@ -0,0 +1,24 @@
++{
++  "name": "@aione/web",
++  "version": "0.1.0",
++  "private": true,
++  "type": "module",
++  "scripts": {
++    "dev": "vite",
++    "build": "vite build",
++    "preview": "vite preview",
++    "type-check": "tsc --noEmit"
++  },
++  "dependencies": {
++    "react": "^18.2.0",
++    "react-dom": "^18.2.0",
++    "@aione/core": "workspace:*"
++  },
++  "devDependencies": {
++    "@types/react": "^18.2.0",
++    "@types/react-dom": "^18.2.0",
++    "@vitejs/plugin-react": "^4.2.0",
++    "typescript": "^5.3.0",
++    "vite": "^5.0.0"
++  }
++}
+diff --git a/apps/web/src/App.tsx b/apps/web/src/App.tsx
+new file mode 100644
+index 0000000..137748e
+--- /dev/null
++++ b/apps/web/src/App.tsx
+@@ -0,0 +1,56 @@
++import { useState } from 'react';
++import { Run } from '@aione/core';
++import PlanReview from './pages/PlanReview';
++import DiffReview from './pages/DiffReview';
++
++function App() {
++  const [run, setRun] = useState<Run | null>(null);
++
++  if (!run) {
++    return (
++      <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
++        <h1>AIOne - Vertical Slice</h1>
++        <button
++          onClick={() =>
++            setRun({
++              id: 'stub-run-1' as any,
++              sessionId: 'stub-session-1' as any,
++              agent: 'orchestrator',
++              status: 'planning',
++              approvals: [],
++              createdAt: new Date(),
++              updatedAt: new Date(),
++            })
++          }
++          style={{
++            padding: '0.5rem 1rem',
++            fontSize: '1rem',
++            cursor: 'pointer',
++            backgroundColor: '#0066cc',
++            color: 'white',
++            border: 'none',
++            borderRadius: '4px',
++          }}
++        >
++          Start Demo Run
++        </button>
++      </div>
++    );
++  }
++
++  if (run.status === 'planning' || run.status === 'awaiting_approval') {
++    if (!run.plan) {
++      return <div>Loading plan...</div>;
++    }
++
++    if (!run.diff) {
++      return <PlanReview run={run} onApprove={() => setRun({ ...run, status: 'awaiting_approval' })} />;
++    }
++
++    return <DiffReview run={run} onApprove={() => setRun({ ...run, status: 'done' })} />;
++  }
++
++  return <div>Run completed!</div>;
++}
++
++export default App;
+diff --git a/apps/web/src/api.ts b/apps/web/src/api.ts
+new file mode 100644
+index 0000000..1ca30a4
+--- /dev/null
++++ b/apps/web/src/api.ts
+@@ -0,0 +1,47 @@
++import { Run, Approval } from '@aione/core';
++
++export async function submitPrompt(prompt: string): Promise<Run> {
++  const res = await fetch('/api/runs', {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json' },
++    body: JSON.stringify({ prompt }),
++  });
++  return res.json();
++}
++
++export async function approvePlan(runId: string): Promise<Approval> {
++  const res = await fetch('/api/gate/plan-review', {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json' },
++    body: JSON.stringify({ runId, decision: 'approved' }),
++  });
++  return res.json();
++}
++
++export async function approveDiff(runId: string): Promise<Approval> {
++  const res = await fetch('/api/gate/diff-review', {
++    method: 'POST',
++    headers: { 'Content-Type': 'application/json' },
++    body: JSON.stringify({ runId, decision: 'approved' }),
++  });
++  return res.json();
++}
++
++export function streamRun(runId: string, callback: (event: any) => void): () => void {
++  const eventSource = new EventSource(`/api/events/${runId}`);
++
++  eventSource.onmessage = (event) => {
++    try {
++      const data = JSON.parse(event.data);
++      callback(data);
++    } catch (e) {
++      console.error('failed to parse SSE event', e);
++    }
++  };
++
++  eventSource.onerror = () => {
++    eventSource.close();
++  };
++
++  return () => eventSource.close();
++}
+diff --git a/apps/web/src/hooks/useRun.ts b/apps/web/src/hooks/useRun.ts
+new file mode 100644
+index 0000000..e8b98a7
+--- /dev/null
++++ b/apps/web/src/hooks/useRun.ts
+@@ -0,0 +1,21 @@
++import { useState, useEffect } from 'react';
++import { Run } from '@aione/core';
++import { streamRun } from '../api';
++
++export function useRun(runId: string | null) {
++  const [run, setRun] = useState<Run | null>(null);
++
++  useEffect(() => {
++    if (!runId) return;
++
++    const unsubscribe = streamRun(runId, (event) => {
++      if (event.type === 'run') {
++        setRun(event.run);
++      }
++    });
++
++    return () => unsubscribe();
++  }, [runId]);
++
++  return run;
++}
+diff --git a/apps/web/src/main.tsx b/apps/web/src/main.tsx
+new file mode 100644
+index 0000000..c018515
+--- /dev/null
++++ b/apps/web/src/main.tsx
+@@ -0,0 +1,9 @@
++import React from 'react';
++import ReactDOM from 'react-dom/client';
++import App from './App';
++
++ReactDOM.createRoot(document.getElementById('root')!).render(
++  <React.StrictMode>
++    <App />
++  </React.StrictMode>,
++);
+diff --git a/apps/web/src/pages/DiffReview.tsx b/apps/web/src/pages/DiffReview.tsx
+new file mode 100644
+index 0000000..f44f926
+--- /dev/null
++++ b/apps/web/src/pages/DiffReview.tsx
+@@ -0,0 +1,49 @@
++import { Run } from '@aione/core';
++import { approveDiff } from '../api';
++
++interface DiffReviewProps {
++  run: Run;
++  onApprove: () => void;
++}
++
++export default function DiffReview({ run, onApprove }: DiffReviewProps) {
++  const handleApprove = async () => {
++    await approveDiff(run.id);
++    onApprove();
++  };
++
++  return (
++    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
++      <h2>Diff Review</h2>
++      {run.diff && (
++        <div>
++          <h3>Files Changed</h3>
++          <ul>
++            {run.diff.files.map((file, i) => (
++              <li key={i}>
++                <strong>{file.path}</strong> (+{file.added} -{file.removed})
++              </li>
++            ))}
++          </ul>
++          <p>
++            <strong>Summary:</strong> {run.diff.summary}
++          </p>
++        </div>
++      )}
++      <button
++        onClick={handleApprove}
++        style={{
++          padding: '0.5rem 1rem',
++          fontSize: '1rem',
++          cursor: 'pointer',
++          backgroundColor: '#00cc00',
++          color: 'white',
++          border: 'none',
++          borderRadius: '4px',
++        }}
++      >
++        Approve Diff
++      </button>
++    </div>
++  );
++}
+diff --git a/apps/web/src/pages/PlanReview.tsx b/apps/web/src/pages/PlanReview.tsx
+new file mode 100644
+index 0000000..3d4db88
+--- /dev/null
++++ b/apps/web/src/pages/PlanReview.tsx
+@@ -0,0 +1,49 @@
++import { Run } from '@aione/core';
++import { approvePlan } from '../api';
++
++interface PlanReviewProps {
++  run: Run;
++  onApprove: () => void;
++}
++
++export default function PlanReview({ run, onApprove }: PlanReviewProps) {
++  const handleApprove = async () => {
++    await approvePlan(run.id);
++    onApprove();
++  };
++
++  return (
++    <div style={{ padding: '2rem', maxWidth: '800px', margin: '0 auto' }}>
++      <h2>Plan Review</h2>
++      {run.plan && (
++        <div>
++          <h3>Steps</h3>
++          <ul>
++            {run.plan.steps.map((step, i) => (
++              <li key={i}>
++                <strong>[{step.role}]</strong> {step.description}
++              </li>
++            ))}
++          </ul>
++          <p>
++            <strong>Rationale:</strong> {run.plan.rationale}
++          </p>
++        </div>
++      )}
++      <button
++        onClick={handleApprove}
++        style={{
++          padding: '0.5rem 1rem',
++          fontSize: '1rem',
++          cursor: 'pointer',
++          backgroundColor: '#00cc00',
++          color: 'white',
++          border: 'none',
++          borderRadius: '4px',
++        }}
++      >
++        Approve Plan
++      </button>
++    </div>
++  );
++}
+diff --git a/apps/web/tsconfig.json b/apps/web/tsconfig.json
+new file mode 100644
+index 0000000..b7586ab
+--- /dev/null
++++ b/apps/web/tsconfig.json
+@@ -0,0 +1,8 @@
++{
++  "extends": "../../tsconfig.json",
++  "compilerOptions": {
++    "jsx": "react-jsx",
++    "jsxImportSource": "react"
++  },
++  "include": ["src/**/*"]
++}
+diff --git a/apps/web/vite.config.ts b/apps/web/vite.config.ts
+new file mode 100644
+index 0000000..d71a9f7
+--- /dev/null
++++ b/apps/web/vite.config.ts
+@@ -0,0 +1,16 @@
++import { defineConfig } from 'vite';
++import react from '@vitejs/plugin-react';
++
++export default defineConfig({
++  plugins: [react()],
++  server: {
++    port: 5173,
++    proxy: {
++      '/api': {
++        target: 'http://localhost:3001',
++        changeOrigin: true,
++        rewrite: (path) => path.replace(/^\/api/, ''),
++      },
++    },
++  },
++});
+diff --git a/pnpm-lock.yaml b/pnpm-lock.yaml
+index afdea41..2fbb36c 100644
+Binary files a/pnpm-lock.yaml and b/pnpm-lock.yaml differ
