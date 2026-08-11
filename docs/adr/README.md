@@ -20,5 +20,8 @@ An ADR records a decision that is expensive to reverse, at the moment it's made,
 | [0004](0004-git-as-sandbox-source-of-truth.md) | Git is the source of truth across sandbox lanes | Accepted |
 | [0005](0005-single-agent-before-multi-agent-split.md) | Ship one full-stack agent before the FE/BE/DevOps split | Accepted |
 | [0006](0006-fly-io-as-v1-deploy-target.md) | Fly.io is the single v1 deploy target | Accepted |
+| [0007](0007-monorepo-vite-hono-worker.md) | pnpm monorepo: Vite SPA + Hono API + separate agent worker | Accepted |
+| [0008](0008-clerk-neon-drizzle-for-platform.md) | Platform auth and database: Clerk + Neon Postgres + Drizzle | Accepted |
+| [0009](0009-thin-slice-before-phases.md) | Thin vertical slice through the entire loop before building phases | Accepted |
 
 Template: [template.md](template.md).
