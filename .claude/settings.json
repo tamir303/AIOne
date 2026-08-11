@@ -63,7 +63,8 @@
   "env": {
     "AIONE_TRUST_TIER": "balanced",
     "AIONE_DEPLOY_TARGET": "fly",
-    "AIONE_SANDBOX_EGRESS": "deny"
+    "AIONE_SANDBOX_EGRESS": "deny",
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
   },
   "hooks": {
     "PreToolUse": [
