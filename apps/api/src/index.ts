@@ -1,4 +1,14 @@
-import 'dotenv/config';
+import { config } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+// Loaded from the repo root regardless of cwd, so `.env` stays the single
+// source of truth documented in the root .env.example — dotenv/config's
+// default (process.cwd()) only works when run from the repo root, which
+// `pnpm --filter` does not do. Must run before @clerk/hono's import, since
+// clerkMiddleware() reads CLERK_SECRET_KEY when invoked below.
+config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../.env') });
+
 import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { clerkMiddleware } from '@clerk/hono';

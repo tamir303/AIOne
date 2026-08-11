@@ -16,7 +16,8 @@
   "dependencies": {
     "@aione/core": "workspace:*",
     "postgres": "^3.4.0",
-    "drizzle-orm": "^0.29.0"
+    "drizzle-orm": "^0.29.0",
+    "dotenv": "^16.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

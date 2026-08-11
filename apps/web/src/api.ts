@@ -1,10 +1,42 @@
-import { Run, Approval } from '@aione/core';
+import { Run, Approval, Workspace, Project } from '@aione/core';
 
-export async function submitPrompt(prompt: string): Promise<Run> {
+function authHeaders(token: string): HeadersInit {
+  return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+}
+
+export async function listWorkspaces(token: string): Promise<Workspace[]> {
+  const res = await fetch('/api/workspaces', { headers: authHeaders(token) });
+  return res.json();
+}
+
+export async function createWorkspace(token: string, name: string): Promise<Workspace> {
+  const res = await fetch('/api/workspaces', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ name }),
+  });
+  return res.json();
+}
+
+export async function listProjects(token: string, workspaceId: string): Promise<Project[]> {
+  const res = await fetch(`/api/workspaces/${workspaceId}/projects`, { headers: authHeaders(token) });
+  return res.json();
+}
+
+export async function createProject(token: string, workspaceId: string, name: string): Promise<Project> {
+  const res = await fetch('/api/projects', {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ workspaceId, name }),
+  });
+  return res.json();
+}
+
+export async function submitPrompt(token: string, projectId: string, prompt: string): Promise<Run> {
   const res = await fetch('/api/runs', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt }),
+    headers: authHeaders(token),
+    body: JSON.stringify({ prompt, projectId }),
   });
   return res.json();
 }

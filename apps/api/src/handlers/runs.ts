@@ -1,60 +1,42 @@
 import { Hono } from 'hono';
+import { getAuth } from '@clerk/hono';
+import { eq } from 'drizzle-orm';
 import { db, runs, sessions, projects, workspaces } from '@aione/db';
 import { createLogger } from '@aione/utils';
 
 const logger = createLogger('api:runs');
 const router = new Hono();
 
-// Vertical-slice stub: there is no real auth/session-creation flow yet, so
-// we find-or-create a single stub workspace -> project -> session chain and
-// reuse its sessionId for every demo run. runs.sessionId has a NOT NULL FK
-// to sessions.id, so a bare random UUID would violate the constraint.
-let stubSessionId: string | null = null;
-
-async function ensureStubSession(): Promise<string> {
-  if (stubSessionId) {
-    return stubSessionId;
-  }
-
-  const [existingSession] = await db.select().from(sessions).limit(1);
-  if (existingSession) {
-    stubSessionId = existingSession.id;
-    return stubSessionId;
-  }
-
-  const [workspace] = await db
-    .insert(workspaces)
-    .values({ userId: 'stub-user', name: 'Stub Workspace' })
-    .returning();
-
-  const [project] = await db
-    .insert(projects)
-    .values({ workspaceId: workspace.id, name: 'Stub Project' })
-    .returning();
-
-  const [session] = await db
-    .insert(sessions)
-    .values({ projectId: project.id })
-    .returning();
-
-  stubSessionId = session.id;
-  return stubSessionId;
-}
-
-// POST /runs
+// POST /runs — body: { prompt: string, projectId: string }. Creates a new
+// Session under the caller's project, then a Run under that Session.
 router.post('/', async (c) => {
+  const { userId } = getAuth(c);
+  if (!userId) {
+    return c.json({ error: 'Unauthorized' }, 401);
+  }
+
   try {
     const body = await c.req.json();
-    const { prompt } = body;
+    const { prompt, projectId } = body;
 
-    logger.info('submit prompt', { prompt });
+    const [project] = await db.select().from(projects).where(eq(projects.id, projectId));
+    if (!project) {
+      return c.json({ error: 'Not found' }, 404);
+    }
 
-    const sessionId = await ensureStubSession();
+    const [workspace] = await db.select().from(workspaces).where(eq(workspaces.id, project.workspaceId));
+    if (!workspace || workspace.userId !== userId) {
+      return c.json({ error: 'Not found' }, 404);
+    }
+
+    logger.info('submit prompt', { userId, projectId, prompt });
+
+    const [session] = await db.insert(sessions).values({ projectId }).returning();
 
     const [run] = await db
       .insert(runs)
       .values({
-        sessionId,
+        sessionId: session.id,
         agent: 'orchestrator',
         status: 'planning',
       })

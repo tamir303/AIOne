@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Show, SignInButton, SignUpButton, UserButton } from '@clerk/react';
+import { Show, SignInButton, SignUpButton, UserButton, useAuth } from '@clerk/react';
 import { submitPrompt } from './api.js';
 import { useRun } from './hooks/useRun.js';
 import PlanReview from './pages/PlanReview.js';
 import DiffReview from './pages/DiffReview.js';
+import Workspaces from './pages/Workspaces.js';
 
 const headerStyle = {
   display: 'flex',
@@ -23,12 +24,19 @@ const primaryButtonStyle = {
   borderRadius: '4px',
 };
 
-function SignedInApp() {
+interface ProjectRunProps {
+  projectId: string;
+}
+
+function ProjectRun({ projectId }: ProjectRunProps) {
+  const { getToken } = useAuth();
   const [runId, setRunId] = useState<string | null>(null);
   const run = useRun(runId);
 
   const handleStart = async () => {
-    const created = await submitPrompt('demo prompt');
+    const token = await getToken();
+    if (!token) return;
+    const created = await submitPrompt(token, projectId, 'demo prompt');
     setRunId(created.id);
   };
 
@@ -56,6 +64,16 @@ function SignedInApp() {
   }
 
   return <div>Run completed!</div>;
+}
+
+function SignedInApp() {
+  const [projectId, setProjectId] = useState<string | null>(null);
+
+  if (!projectId) {
+    return <Workspaces onSelectProject={setProjectId} />;
+  }
+
+  return <ProjectRun projectId={projectId} />;
 }
 
 function App() {
