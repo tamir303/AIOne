@@ -8,6 +8,7 @@ export type ActionClass =
   | 'merge'
   | 'registry_push'
   | 'deploy'
+  | 'docker_build'
   | 'destructive';
 
 export function classifyAction(action: {
@@ -34,6 +35,10 @@ export function classifyAction(action: {
       return 'registry_push';
     case 'deploy':
       return 'deploy';
+    case 'terminal_mutating':
+      return 'terminal_mutating';
+    case 'docker_build':
+      return 'docker_build';
     default:
       return 'destructive';
   }

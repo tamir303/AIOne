@@ -13,6 +13,7 @@ export const gatePolicy: Record<ActionClass, Record<TrustTier, GateDecision>> = 
   merge: { cautious: 'confirm', balanced: 'confirm', autonomous: 'confirm' },
   registry_push: { cautious: 'confirm', balanced: 'confirm', autonomous: 'confirm' },
   deploy: { cautious: 'confirm', balanced: 'confirm', autonomous: 'confirm' },
+  docker_build: { cautious: 'confirm', balanced: 'confirm', autonomous: 'auto' },
   destructive: { cautious: 'confirm', balanced: 'confirm', autonomous: 'confirm' },
 };
 
