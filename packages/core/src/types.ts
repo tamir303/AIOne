@@ -43,15 +43,22 @@ export interface Run {
   agent: 'orchestrator' | 'frontend' | 'backend' | 'devops' | 'fullstack';
   plan?: Plan;
   diff?: Diff;
-  status: 'planning' | 'awaiting_approval' | 'executing' | 'done' | 'failed';
+  status: 'planning' | 'awaiting_approval' | 'executing' | 'done' | 'failed' | 'rejected';
   approvals: Approval[];
   createdAt: Date;
   updatedAt: Date;
 }
 
+// The review checkpoint a decision belongs to. 'plan-review' and
+// 'diff-review' are the two gates the vertical slice's Run loop pauses at;
+// future gates (e.g. a push or deploy review) extend this rather than reuse
+// one of these two.
+export type ReviewGate = 'plan-review' | 'diff-review';
+
 export interface Approval {
   id: ApprovalId;
   runId: RunId;
+  gate: ReviewGate;
   actionClass: string;
   actionSummary: string;
   decision: 'approved' | 'rejected';
