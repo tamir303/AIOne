@@ -8,7 +8,7 @@ import type { WorkerRun } from './types.js';
 const logger = createLogger('poll');
 
 // Run -> Session -> Project join to resolve trustTier, which lives on
-// Project rather than Run (see types.ts). Excludes 'done'/'failed' so
+// Project rather than Run (see types.ts). Excludes 'done'/'failed'/'expired' so
 // finished runs stop being re-fetched every tick.
 async function fetchPendingRuns(): Promise<WorkerRun[]> {
   const rows = await db
@@ -19,11 +19,21 @@ async function fetchPendingRuns(): Promise<WorkerRun[]> {
       plan: runs.plan,
       diff: runs.diff,
       trustTier: projects.trustTier,
+      costQuotaTokens: runs.costQuotaTokens,
+      tokensUsed: runs.tokensUsed,
+      idleTimeoutMinutes: runs.idleTimeoutMinutes,
+      gateEnteredAt: runs.gateEnteredAt,
     })
     .from(runs)
     .innerJoin(sessions, eq(runs.sessionId, sessions.id))
     .innerJoin(projects, eq(sessions.projectId, projects.id))
-    .where(and(ne(runs.status, 'done'), ne(runs.status, 'failed')));
+    .where(
+      and(
+        ne(runs.status, 'done'),
+        ne(runs.status, 'failed'),
+        ne(runs.status, 'expired'),
+      ),
+    );
 
   // The jsonb plan/diff columns and the varchar status/trustTier columns
   // are untyped at the database boundary (unknown / plain string). The
@@ -36,6 +46,10 @@ async function fetchPendingRuns(): Promise<WorkerRun[]> {
     plan: row.plan as Plan | undefined,
     diff: row.diff as Diff | undefined,
     trustTier: row.trustTier as TrustTier,
+    costQuotaTokens: row.costQuotaTokens as bigint | null,
+    tokensUsed: row.tokensUsed as bigint,
+    idleTimeoutMinutes: row.idleTimeoutMinutes as number | null,
+    gateEnteredAt: row.gateEnteredAt as Date | null,
   }));
 }
 

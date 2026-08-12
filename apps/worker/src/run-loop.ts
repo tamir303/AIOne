@@ -6,6 +6,12 @@ import { planFromPrompt } from './orchestrator/index.js';
 import { classifyActionSafely } from './gate/classifier.js';
 import { requestApproval } from './gate/approver.js';
 import type { WorkerRun } from './types.js';
+import {
+  checkAndExpireIdleRun,
+  wouldExceedCostQuota,
+  recordGateEntryTime,
+  clearGateEntryTime,
+} from './run-enforcement.js';
 
 const logger = createLogger('run-loop');
 
@@ -13,6 +19,19 @@ export async function processRun(run: WorkerRun): Promise<void> {
   logger.info('processing run', { runId: run.id, status: run.status });
 
   try {
+    // Check for idle timeout at gates and expire if needed
+    const wasExpired = await checkAndExpireIdleRun(run);
+    if (wasExpired) {
+      logger.info('run was expired due to idle timeout', { runId: run.id });
+      return;
+    }
+
+    // Skip processing if already expired
+    if (run.status === 'expired') {
+      logger.info('run is expired, skipping', { runId: run.id });
+      return;
+    }
+
     // Stub: generate a plan
     if (!run.plan && run.status === 'planning') {
       const plan = await planFromPrompt('stub prompt');
@@ -28,6 +47,9 @@ export async function processRun(run: WorkerRun): Promise<void> {
 
       logger.info('plan generated', { runId: run.id });
 
+      // Record entry into gate state
+      await recordGateEntryTime(run.id);
+
       // Classify the action, then request approval through the gate.
       // Every state-changing step goes through classify -> requestApproval;
       // there is no path that writes a plan without it.
@@ -39,6 +61,9 @@ export async function processRun(run: WorkerRun): Promise<void> {
       );
 
       logger.info('plan approved', { runId: run.id });
+
+      // Clear gate entry time now that approval is granted
+      await clearGateEntryTime(run.id);
     }
 
     // Stub: generate a diff
@@ -62,6 +87,9 @@ export async function processRun(run: WorkerRun): Promise<void> {
 
       logger.info('diff generated', { runId: run.id });
 
+      // Record entry into gate state
+      await recordGateEntryTime(run.id);
+
       const diffActionClass = classifyActionSafely({ type: 'file_write' });
       await requestApproval(
         { ...run, diff, status: 'awaiting_approval' },
@@ -70,6 +98,9 @@ export async function processRun(run: WorkerRun): Promise<void> {
       );
 
       logger.info('diff approved', { runId: run.id });
+
+      // Clear gate entry time now that approval is granted
+      await clearGateEntryTime(run.id);
     }
 
     // Mark done
