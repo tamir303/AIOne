@@ -28,6 +28,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Build must run before type-check/test: packages/*'s package.json
+      # `exports` point at `./dist/*.js` (and dist/ is gitignored), so any
+      # cross-package import (e.g. apps/web importing @aione/core) can't
+      # resolve on a clean checkout until dist exists. pnpm -r respects
+      # workspace dependency order, so this builds packages/* before the
+      # apps/* that consume them.
+      - name: Build
+        run: pnpm -r build
+
       - name: Type check
         run: pnpm -r type-check
 
@@ -36,6 +45,3 @@ jobs:
 
       - name: Test
         run: pnpm -r test
-
-      - name: Build
-        run: pnpm -r build
