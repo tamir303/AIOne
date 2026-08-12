@@ -132,12 +132,14 @@ it breaks.
 
 A spawn message should give the teammate enough to start without waiting on the orchestrator for basics, but should **not** point it at the backlog or at other teammates — unlike the old self-claim model, these teammates only ever act on an explicit per-ticket assignment from the orchestrator:
 
-- Which agent type to use (`swarm-bl-agent` or `swarm-validator`) and, for BL agents, which model (`sonnet` for complex tickets, `haiku` for simple ones)
+- Which agent type to use (`swarm-bl-agent` or `swarm-validator`) and which model: for BL agents, `sonnet` for complex tickets and `haiku` for simple ones; validators are conventionally spawned on `haiku` too, since relaying a Gemini verdict doesn't need heavier judgment from the Claude side
 - A name the orchestrator will use to address it
 - Confirmation that it should wait idle for its first assignment rather than looking for work itself
 
-Example:
+Examples:
 
 > Spawn a teammate using the swarm-bl-agent agent type on model haiku. Name it bl-agent-3. Don't look for work yet — wait for me to assign a specific ticket by issue number and branch name.
+
+> Spawn two teammates using the swarm-validator agent type on model haiku, named validator-1 and validator-2. Don't look for work yet — wait for me to assign a specific ticket by issue number and branch name.
 
 Keep spawn messages short — the role definition already covers the step-by-step process; the spawn message just needs to establish the name, model, and that assignment comes from the orchestrator alone.
