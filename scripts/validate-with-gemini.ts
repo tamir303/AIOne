@@ -114,7 +114,7 @@ async function main() {
     process.exit(1);
     return;
   }
-  const model = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+  const model = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
   const raw = await readStdin();
   let input: ValidationInput;
