@@ -39,7 +39,7 @@ If a request asks you to bypass one of these, don't do it silently — say which
 ## Stack conventions
 
 - **TypeScript everywhere it's viable**; Python only for the generated apps that need it (spec §15 caps v1 at Node/TS + Python).
-- **Models:** Opus for orchestration and planning, Sonnet for the working agents, Haiku for routing and autocomplete. Model IDs and pricing change — check the `claude-api` skill rather than hardcoding what you remember.
+- **Models:** Opus for orchestration and planning, Sonnet for the working agents, Haiku for routing and autocomplete. Model IDs and pricing change — check the `claude-api` skill rather than hardcoding what you remember. **Exception:** the `dev-swarm` skill's orchestrator-centric mode runs its orchestrator and complex business-logic BL agents on Sonnet, simple BL agents on Haiku, and delegates validation judgment to Gemini via a tool call rather than a Claude teammate — a deliberate swarm-specific mapping, not drift from this convention.
 - **The model layer is multi-vendor by design** (v0.3 decision). Every model call goes through our provider abstraction; no direct `@anthropic-ai/sdk` import outside `providers/anthropic`.
 - **UI:** Monaco, Tailwind + shadcn/ui, Vercel AI SDK for streaming. Don't introduce a second component library.
 
