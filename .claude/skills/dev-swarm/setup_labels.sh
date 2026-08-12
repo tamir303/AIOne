@@ -19,11 +19,13 @@ fi
 
 # name|color|description
 labels=(
-  "swarm:ready|0e8a16|Backlog item, unclaimed, ready for an implementer to pick up"
-  "swarm:in-progress|fbca04|An implementer has claimed it and is actively working"
-  "swarm:in-review|1d76db|PR is open and waiting on a validator"
-  "swarm:changes-requested|d93f0b|A validator asked for changes; back with the implementer"
-  "swarm:blocked|b60205|Stuck - needs more information or a human decision"
+  "swarm:ready|0e8a16|Backlog item, unassigned, ready for the orchestrator to hand to a BL agent"
+  "swarm:in-progress|fbca04|A BL agent has been assigned and is actively implementing"
+  "swarm:ready-for-validation|1d76db|BL agent finished and pushed; waiting for the orchestrator to assign a validation agent"
+  "swarm:in-validation|5319e7|A validation agent is checking the branch"
+  "swarm:rejected-need-context|f9d0c4|Validation agent couldn't judge the work; a question is on its way back to the BL agent via the orchestrator"
+  "swarm:rejected-need-fix|d93f0b|Validation agent found a real defect; fix requirements are on their way back to the BL agent via the orchestrator"
+  "swarm:done|2cbe4e|Validation passed; the BL agent is opening (or has opened) the PR for the orchestrator to approve and merge"
 )
 
 for entry in "${labels[@]}"; do
