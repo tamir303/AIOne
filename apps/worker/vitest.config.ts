@@ -16,4 +16,12 @@ export default defineConfig({
       '@aione/utils': path.resolve(dirname, '../../packages/utils/src/index.ts'),
     },
   },
+  test: {
+    // tsconfig's "include": ["src/**/*"] compiles *.test.ts into
+    // dist/*.test.js too. If a dev (or CI step order change) runs `build`
+    // before `test`, vitest's own default excludes don't reliably keep up
+    // with this repo's outDir layout, so every test would run twice —
+    // spell it out explicitly rather than relying on the default.
+    exclude: ['**/node_modules/**', '**/dist/**'],
+  },
 });
