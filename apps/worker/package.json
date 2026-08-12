@@ -7,7 +7,9 @@
     "dev": "node --import tsx/esm src/index.ts",
     "build": "tsc",
     "type-check": "tsc --noEmit",
-    "lint": "eslint src --ext .ts"
+    "lint": "eslint src --ext .ts",
+    "pretest": "pnpm --filter @aione/core --filter @aione/utils build",
+    "test": "node --import tsx/esm --test src/orchestrator/egress.test.ts"
   },
   "dependencies": {
     "@aione/core": "workspace:*",
