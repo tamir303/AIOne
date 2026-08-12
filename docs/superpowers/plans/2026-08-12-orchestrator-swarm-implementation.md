@@ -263,9 +263,14 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
 
 - [ ] **Step 4: Verify the Gemini model name before relying on it**
 
-Run: `curl -s "https://generativelanguage.googleapis.com/v1beta/models?key=$GEMINI_API_KEY" | grep -o '"name": "models/gemini[^"]*"' | head -20`
+This repo's `.claude/settings.json` denies `Bash(curl:*)` outright, so use Node's global `fetch` instead of curl for this check:
 
-Confirm `gemini-2.0-flash` (or whatever the current free-tier flash model is named) appears in the list. If it doesn't, update the `GEMINI_MODEL` default in `main()` (Step 3) to a model that does appear, then re-run this check. Do not skip this — Gemini model names and availability change independently of this plan.
+Run:
+```bash
+node -e "fetch('https://generativelanguage.googleapis.com/v1beta/models?key=' + process.env.GEMINI_API_KEY).then(r => r.json()).then(d => console.log(d.models.map(m => m.name).filter(n => n.includes('gemini')).join('\n')))"
+```
+
+Confirm `models/gemini-2.0-flash` (or whatever the current free-tier flash model is named) appears in the list. If it doesn't, update the `GEMINI_MODEL` default in `main()` (Step 3) to a model that does appear (without the `models/` prefix, matching the format already used in the URL template), then re-run this check. Do not skip this — Gemini model names and availability change independently of this plan.
 
 - [ ] **Step 5: Run tests to verify they pass**
 
