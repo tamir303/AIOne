@@ -62,7 +62,7 @@ Once the orchestrator approves a `swarm:done` PR, it merges immediately:
 gh pr merge <N> --squash --auto
 ```
 
-`--auto` enables GitHub's native auto-merge, which waits for required status checks to pass before actually merging — this repo has `ci` configured as a required status check on `main`, so this is a real gate, not just a delay. If a repository doesn't have auto-merge enabled (`gh api repos/:owner/:repo --jq .allow_auto_merge`), drop `--auto` and merge directly; just be aware that in that case nothing is gating the merge on CI at all.
+`--auto` enables GitHub's native auto-merge, which waits for required status checks to pass before actually merging — but only if a status check is actually marked *required* on `main`. This repo defines a `ci` job in `.github/workflows/ci.yml`, but a workflow existing doesn't by itself make it a required check; that's branch-protection state, not something this repo's files confirm. Verify with `gh api repos/:owner/:repo/branches/main/protection --jq .required_status_checks.contexts` before relying on `--auto` as a real gate — don't assume it's enforced just because the workflow exists. If a repository doesn't have auto-merge enabled (`gh api repos/:owner/:repo --jq .allow_auto_merge`), drop `--auto` and merge directly; just be aware that in that case nothing is gating the merge on CI at all.
 
 ## Rejection loops
 
