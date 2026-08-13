@@ -39,6 +39,7 @@ router.post('/', async (c) => {
         sessionId: session.id,
         agent: 'orchestrator',
         status: 'planning',
+        prompt: typeof prompt === 'string' ? prompt : '',
       })
       .returning();
 

@@ -27,6 +27,14 @@ export const runs = pgTable('runs', {
   id: uuid('id').primaryKey().defaultRandom(),
   sessionId: uuid('session_id').notNull().references(() => sessions.id),
   agent: varchar('agent', { length: 50 }).notNull(),
+  // The user's original prompt for this Run. planFromPrompt() (see
+  // apps/worker/src/orchestrator/index.ts) needs this to generate a plan
+  // that actually reflects what was asked, rather than a hardcoded stub —
+  // apps/api/src/handlers/runs.ts writes it at Run-creation time.
+  // Default '' (rather than a NOT NULL-only column) so this migration
+  // doesn't fail against any pre-existing rows from before this column
+  // existed.
+  prompt: text('prompt').notNull().default(''),
   plan: jsonb('plan'),
   diff: jsonb('diff'),
   status: varchar('status', { length: 50 }).notNull().default('planning'),

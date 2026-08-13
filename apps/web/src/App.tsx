@@ -31,12 +31,13 @@ interface ProjectRunProps {
 function ProjectRun({ projectId }: ProjectRunProps) {
   const { getToken } = useAuth();
   const [runId, setRunId] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState('');
   const run = useRun(runId);
 
   const handleStart = async () => {
     const token = await getToken();
-    if (!token) return;
-    const created = await submitPrompt(token, projectId, 'demo prompt');
+    if (!token || !prompt.trim()) return;
+    const created = await submitPrompt(token, projectId, prompt.trim());
     setRunId(created.id);
   };
 
@@ -44,8 +45,15 @@ function ProjectRun({ projectId }: ProjectRunProps) {
     return (
       <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
         <h1>AIOne - Vertical Slice</h1>
-        <button onClick={handleStart} style={primaryButtonStyle}>
-          Start Demo Run
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Describe what you want built..."
+          rows={4}
+          style={{ width: '100%', marginBottom: '1rem', fontSize: '1rem', padding: '0.5rem' }}
+        />
+        <button onClick={handleStart} disabled={!prompt.trim()} style={primaryButtonStyle}>
+          Start Run
         </button>
       </div>
     );

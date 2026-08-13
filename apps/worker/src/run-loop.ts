@@ -17,9 +17,12 @@ const logger = createLogger('run-loop');
 // decision shows up.
 //
 // Cost-quota enforcement (wouldExceedCostQuota in run-enforcement.ts) is
-// intentionally not wired in here yet: plan/diff generation below are still
-// stubs, not real model calls, so there is nothing to bound the cost of.
-// It belongs at the point a real model call is made (see #2/#3/#4).
+// intentionally not wired in here yet. Plan generation (Step 1, below) is a
+// real model call as of #3, but nothing yet checks its token cost against
+// the Run's quota or records actual usage via updateRunTokenUsage — that's
+// deferred, same as diff generation (Step 3), which remains a stub pending
+// #4. Wiring cost-quota enforcement to the real plan call is left for a
+// follow-up rather than folded into #3's scope.
 export async function processRun(run: WorkerRun): Promise<void> {
   logger.info('processing run', { runId: run.id, status: run.status });
 
@@ -36,7 +39,7 @@ export async function processRun(run: WorkerRun): Promise<void> {
     // Step 1: generate the plan, then stop. The plan is not reviewed in
     // this same call — the next tick evaluates the plan-review gate.
     if (!run.plan && run.status === 'planning') {
-      const plan = await planFromPrompt('stub prompt');
+      const plan = await planFromPrompt(run.prompt);
 
       await db
         .update(runs)
@@ -65,7 +68,10 @@ export async function processRun(run: WorkerRun): Promise<void> {
         run,
         'plan-review',
         planActionClass,
-        'Plan generated: will create backend API and frontend UI',
+        // Audit-trail summary for the approvals row — derived from the
+        // real generated plan (see orchestrator/index.ts) rather than a
+        // fixed string, now that the plan reflects the actual prompt.
+        `Plan generated: ${run.plan.steps.length} step(s) — ${run.plan.rationale}`,
       );
 
       if (outcome.status === 'pending') {
