@@ -93,6 +93,12 @@ function makeRun(overrides: Partial<WorkerRun> = {}): WorkerRun {
     sessionId: 'session-1' as any,
     status: 'awaiting_approval',
     trustTier: 'cautious',
+    // Not exercised by these tests (see run-enforcement.test.ts and
+    // run-loop-cost-idle.test.ts) — unlimited/no-timeout defaults.
+    costQuotaTokens: null,
+    tokensUsed: BigInt(0),
+    idleTimeoutMinutes: null,
+    gateEnteredAt: null,
     ...overrides,
   };
 }

@@ -115,11 +115,28 @@ function currentRun(trustTier: WorkerRun['trustTier']): WorkerRun {
     plan: hoisted.runRow.plan as WorkerRun['plan'],
     diff: hoisted.runRow.diff as WorkerRun['diff'],
     trustTier,
+    // Cost quota / idle timeout enforcement is not what this test suite
+    // exercises (see run-enforcement.test.ts and
+    // run-loop-cost-idle.test.ts) — unlimited/no-timeout defaults here keep
+    // that logic out of the way of the gate-blocking behavior under test.
+    costQuotaTokens: (hoisted.runRow.costQuotaTokens as bigint | null) ?? null,
+    tokensUsed: (hoisted.runRow.tokensUsed as bigint) ?? BigInt(0),
+    idleTimeoutMinutes: (hoisted.runRow.idleTimeoutMinutes as number | null) ?? null,
+    gateEnteredAt: (hoisted.runRow.gateEnteredAt as Date | null) ?? null,
   };
 }
 
 beforeEach(() => {
-  hoisted.runRow = { id: 'run-1', status: 'planning', plan: undefined, diff: undefined };
+  hoisted.runRow = {
+    id: 'run-1',
+    status: 'planning',
+    plan: undefined,
+    diff: undefined,
+    costQuotaTokens: null,
+    tokensUsed: BigInt(0),
+    idleTimeoutMinutes: null,
+    gateEnteredAt: null,
+  };
   hoisted.approvalRows.length = 0;
   hoisted.nextId.current = 1;
 });
