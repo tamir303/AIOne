@@ -103,12 +103,20 @@ vi.mock('@aione/utils', async (importOriginal) => {
   };
 });
 
-// diffFromPlan (see ./orchestrator/diff.ts) makes a real model-provider
-// call by default as of #4. This suite exercises the gate-blocking state
-// machine, not diff generation itself (see ./orchestrator/diff.test.ts for
-// that) — stub it out so these tests never require live credentials or
-// network access, while still returning a shape consistent with the
-// approved plan so the diff-review gate has something real to act on.
+// This suite exercises the gate mechanism, not plan/diff *content* — #3's
+// planFromPrompt() and #4's diffFromPlan() both make a real model-provider
+// call by default, which must never run in a unit test. Stub both so the
+// gate-transition assertions below are unaffected by (and don't require
+// live credentials for) either call; planFromPrompt's own prompt-reflecting
+// behavior is covered by orchestrator/index.test.ts, and diffFromPlan's own
+// plan-reflecting behavior is covered by orchestrator/diff.test.ts.
+vi.mock('./orchestrator/index.js', () => ({
+  planFromPrompt: async (prompt: string) => ({
+    steps: [{ role: 'backend', description: `stub step for: ${prompt}` }],
+    rationale: 'stub plan for gate-mechanism tests',
+  }),
+}));
+
 vi.mock('./orchestrator/diff.js', () => ({
   diffFromPlan: vi.fn(async (plan: { steps: Array<{ role: string }> }) => ({
     files: plan.steps.map((step, i) => ({
@@ -129,6 +137,7 @@ function currentRun(trustTier: WorkerRun['trustTier']): WorkerRun {
     id: hoisted.runRow.id as RunId,
     sessionId: 'session-1' as SessionId,
     status: hoisted.runRow.status as WorkerRun['status'],
+    prompt: (hoisted.runRow.prompt as string) ?? 'test prompt',
     plan: hoisted.runRow.plan as WorkerRun['plan'],
     diff: hoisted.runRow.diff as WorkerRun['diff'],
     trustTier,

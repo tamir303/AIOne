@@ -23,6 +23,9 @@ export interface WorkerRun {
     | 'failed'
     | 'rejected'
     | 'expired';
+  // The user's original prompt, needed by planFromPrompt() to generate a
+  // plan that reflects what was actually asked for.
+  prompt: string;
   plan?: Plan;
   diff?: Diff;
   trustTier: TrustTier;

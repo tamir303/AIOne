@@ -98,10 +98,19 @@ vi.mock('@aione/utils', async (importOriginal) => {
   };
 });
 
-// diffFromPlan (see ./orchestrator/diff.ts) makes a real model-provider
-// call by default as of #4. This suite exercises cost-quota/idle-timeout
-// enforcement, not diff generation itself — stub it out so these tests
-// never require live credentials or network access.
+// This suite exercises cost-quota/idle-timeout enforcement, not plan/diff
+// *content* — #3's planFromPrompt() and #4's diffFromPlan() both make a
+// real model-provider call by default, which must never run in a unit
+// test. Stub both out; prompt-reflecting and plan-reflecting behavior are
+// covered by orchestrator/index.test.ts and orchestrator/diff.test.ts
+// respectively.
+vi.mock('./orchestrator/index.js', () => ({
+  planFromPrompt: async (prompt: string) => ({
+    steps: [{ role: 'backend', description: `stub step for: ${prompt}` }],
+    rationale: 'stub plan for cost/idle enforcement tests',
+  }),
+}));
+
 vi.mock('./orchestrator/diff.js', () => ({
   diffFromPlan: vi.fn(async (plan: { steps: Array<{ role: string }> }) => ({
     files: plan.steps.map((step, i) => ({
@@ -123,6 +132,7 @@ function currentRun(
     id: hoisted.runRow.id as RunId,
     sessionId: 'session-1' as SessionId,
     status: hoisted.runRow.status as WorkerRun['status'],
+    prompt: (hoisted.runRow.prompt as string) ?? 'test prompt',
     plan: hoisted.runRow.plan as WorkerRun['plan'],
     diff: hoisted.runRow.diff as WorkerRun['diff'],
     trustTier,
