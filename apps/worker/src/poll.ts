@@ -8,8 +8,11 @@ import type { WorkerRun } from './types.js';
 const logger = createLogger('poll');
 
 // Run -> Session -> Project join to resolve trustTier, which lives on
-// Project rather than Run (see types.ts). Excludes 'done'/'failed' so
-// finished runs stop being re-fetched every tick.
+// Project rather than Run (see types.ts). Excludes 'done'/'failed'/'rejected'
+// so runs that can no longer advance on their own stop being re-fetched
+// every tick. 'rejected' specifically means a human said no at a gate —
+// see run-loop.ts — which is a stopping state, not a retryable one, until a
+// later ticket adds a resubmission path.
 async function fetchPendingRuns(): Promise<WorkerRun[]> {
   const rows = await db
     .select({
@@ -23,7 +26,13 @@ async function fetchPendingRuns(): Promise<WorkerRun[]> {
     .from(runs)
     .innerJoin(sessions, eq(runs.sessionId, sessions.id))
     .innerJoin(projects, eq(sessions.projectId, projects.id))
-    .where(and(ne(runs.status, 'done'), ne(runs.status, 'failed')));
+    .where(
+      and(
+        ne(runs.status, 'done'),
+        ne(runs.status, 'failed'),
+        ne(runs.status, 'rejected'),
+      ),
+    );
 
   // The jsonb plan/diff columns and the varchar status/trustTier columns
   // are untyped at the database boundary (unknown / plain string). The
