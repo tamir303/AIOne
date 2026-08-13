@@ -38,6 +38,13 @@ export const runs = pgTable('runs', {
 export const approvals = pgTable('approvals', {
   id: uuid('id').primaryKey().defaultRandom(),
   runId: uuid('run_id').notNull().references(() => runs.id),
+  // Which review checkpoint this decision belongs to (e.g. 'plan-review',
+  // 'diff-review'). actionClass alone can't disambiguate: two different
+  // gates in the same Run can share an actionClass (both the plan and the
+  // diff gate classify as 'file_write'), and the worker needs to match a
+  // human decision written by apps/api/src/handlers/gate.ts back to the
+  // specific gate it was waiting on.
+  gate: varchar('gate', { length: 50 }).notNull(),
   actionClass: varchar('action_class', { length: 50 }).notNull(),
   actionSummary: text('action_summary').notNull(),
   decision: varchar('decision', { length: 50 }).notNull(),

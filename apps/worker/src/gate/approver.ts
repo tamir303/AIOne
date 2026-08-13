@@ -1,19 +1,34 @@
-import { ApprovalToken, ActionClass, getDecision } from '@aione/core';
+import { and, eq, desc } from 'drizzle-orm';
+import { ApprovalToken, ActionClass, ReviewGate, getDecision } from '@aione/core';
 import { db, approvals } from '@aione/db';
 import { createLogger, GateError } from '@aione/utils';
 import type { WorkerRun } from '../types.js';
 
 const logger = createLogger('gate:approver');
 
+/**
+ * Outcome of a single, non-blocking check for whether `gate` has been
+ * decided for `run`. There is no in-process wait here — the worker's own
+ * poll loop (apps/worker/src/poll.ts) is the polling mechanism. A 'pending'
+ * result means "nothing decided yet"; run-loop.ts must stop and let the
+ * next tick re-check, not retry in a loop of its own.
+ */
+export type ApprovalOutcome =
+  | { status: 'approved'; token: ApprovalToken }
+  | { status: 'pending' }
+  | { status: 'rejected'; reason?: string };
+
 export async function requestApproval(
   run: WorkerRun,
+  gate: ReviewGate,
   actionClass: ActionClass,
   actionSummary: string,
-): Promise<ApprovalToken> {
+): Promise<ApprovalOutcome> {
   const decision = getDecision(actionClass, run.trustTier);
 
   logger.info('requesting approval', {
     runId: run.id,
+    gate,
     actionClass,
     decision,
     tier: run.trustTier,
@@ -31,6 +46,7 @@ export async function requestApproval(
       .insert(approvals)
       .values({
         runId: run.id,
+        gate,
         actionClass,
         actionSummary,
         decision: 'approved',
@@ -38,30 +54,33 @@ export async function requestApproval(
       })
       .returning();
 
-    logger.info('auto-approved', { runId: run.id, approvalId: approval.id });
-    return ApprovalToken.create(run.id);
+    logger.info('auto-approved', { runId: run.id, gate, approvalId: approval.id });
+    return { status: 'approved', token: ApprovalToken.create(run.id) };
   }
 
-  // decision === 'confirm'
-  // In the vertical slice, we stub the human approval.
-  // In Phase 2+, this waits on a webhook from the API triggered by the
-  // web UI's plan-review / diff-review screens.
-  logger.info('awaiting human approval', { runId: run.id });
+  // decision === 'confirm': block on the real approval row written by
+  // apps/api/src/handlers/gate.ts's /plan-review and /diff-review endpoints
+  // (hit by the web UI's Approve/Reject buttons). The worker never writes
+  // this decision itself — it only reads. If a human hasn't decided yet,
+  // this returns 'pending' and the caller stops for this tick; the Run
+  // stays at 'awaiting_approval' and gets re-checked on the next poll tick.
+  const [latest] = await db
+    .select()
+    .from(approvals)
+    .where(and(eq(approvals.runId, run.id), eq(approvals.gate, gate)))
+    .orderBy(desc(approvals.decidedAt))
+    .limit(1);
 
-  // Stub: approve after 1 second (for testing)
-  await new Promise((resolve) => setTimeout(resolve, 1000));
+  if (!latest) {
+    logger.info('awaiting human approval', { runId: run.id, gate });
+    return { status: 'pending' };
+  }
 
-  const [approval] = await db
-    .insert(approvals)
-    .values({
-      runId: run.id,
-      actionClass,
-      actionSummary,
-      decision: 'approved',
-      tier: run.trustTier,
-    })
-    .returning();
+  if (latest.decision === 'rejected') {
+    logger.info('human rejected', { runId: run.id, gate, approvalId: latest.id });
+    return { status: 'rejected', reason: latest.reason ?? undefined };
+  }
 
-  logger.info('human approved', { runId: run.id, approvalId: approval.id });
-  return ApprovalToken.create(run.id);
+  logger.info('human approved', { runId: run.id, gate, approvalId: latest.id });
+  return { status: 'approved', token: ApprovalToken.create(run.id) };
 }
