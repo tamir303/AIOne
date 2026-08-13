@@ -98,6 +98,21 @@ vi.mock('@aione/utils', async (importOriginal) => {
   };
 });
 
+// diffFromPlan (see ./orchestrator/diff.ts) makes a real model-provider
+// call by default as of #4. This suite exercises cost-quota/idle-timeout
+// enforcement, not diff generation itself — stub it out so these tests
+// never require live credentials or network access.
+vi.mock('./orchestrator/diff.js', () => ({
+  diffFromPlan: vi.fn(async (plan: { steps: Array<{ role: string }> }) => ({
+    files: plan.steps.map((step, i) => ({
+      path: `stub/${step.role}-${i}.ts`,
+      added: 10,
+      removed: 0,
+    })),
+    summary: 'Stub diff for cost/idle tests.',
+  })),
+}));
+
 const { processRun } = await import('./run-loop.js');
 
 function currentRun(

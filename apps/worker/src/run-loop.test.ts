@@ -103,6 +103,23 @@ vi.mock('@aione/utils', async (importOriginal) => {
   };
 });
 
+// diffFromPlan (see ./orchestrator/diff.ts) makes a real model-provider
+// call by default as of #4. This suite exercises the gate-blocking state
+// machine, not diff generation itself (see ./orchestrator/diff.test.ts for
+// that) — stub it out so these tests never require live credentials or
+// network access, while still returning a shape consistent with the
+// approved plan so the diff-review gate has something real to act on.
+vi.mock('./orchestrator/diff.js', () => ({
+  diffFromPlan: vi.fn(async (plan: { steps: Array<{ role: string }> }) => ({
+    files: plan.steps.map((step, i) => ({
+      path: `stub/${step.role}-${i}.ts`,
+      added: 10,
+      removed: 0,
+    })),
+    summary: 'Stub diff for gate tests.',
+  })),
+}));
+
 const { processRun } = await import('./run-loop.js');
 
 // Simulates the next worker poll tick: rebuild the WorkerRun the way
