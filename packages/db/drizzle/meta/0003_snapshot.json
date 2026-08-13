@@ -1,5 +1,5 @@
 {
-  "id": "be348d5a-a27c-4a73-ac6a-cdc192675dd2",
+  "id": "fbe50e1c-d050-470f-b213-57876445b72e",
   "prevId": "a877efdc-090d-4e43-ab1e-c377285ddea5",
   "version": "5",
   "dialect": "pg",
@@ -250,7 +250,7 @@
           "type": "bigint",
           "primaryKey": false,
           "notNull": true,
-          "default": 0
+          "default": "0"
         },
         "idle_timeout_minutes": {
           "name": "idle_timeout_minutes",

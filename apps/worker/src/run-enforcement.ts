@@ -5,7 +5,7 @@ import { db, runs } from '@aione/db';
 import { createLogger } from '@aione/utils';
 import { eq } from 'drizzle-orm';
 import type { WorkerRun } from './types.js';
-import { getIdleTimeout, getCostQuota } from './config.js';
+import { getIdleTimeout } from './config.js';
 
 const logger = createLogger('run:enforcement');
 

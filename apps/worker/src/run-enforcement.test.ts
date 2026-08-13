@@ -2,7 +2,6 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import type { RunId, SessionId } from '@aione/core';
 import type { WorkerRun } from './types.js';
 import {
-  checkAndExpireIdleRun,
   wouldExceedCostQuota,
   recordGateEntryTime,
   clearGateEntryTime,
