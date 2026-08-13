@@ -1,8 +1,8 @@
-import { Diff } from '@aione/core';
 import { db, runs } from '@aione/db';
 import { createLogger } from '@aione/utils';
 import { eq } from 'drizzle-orm';
 import { planFromPrompt } from './orchestrator/index.js';
+import { diffFromPlan } from './orchestrator/diff.js';
 import { classifyActionSafely } from './gate/classifier.js';
 import { requestApproval } from './gate/approver.js';
 import type { WorkerRun } from './types.js';
@@ -27,13 +27,12 @@ const logger = createLogger('run-loop');
 // only happen alongside the one real model call this step was already
 // going to make.
 //
-// Cost-quota enforcement (wouldExceedCostQuota in run-enforcement.ts) is
 // intentionally not wired in here yet. Plan generation (Step 1, below) is a
-// real model call as of #3, but nothing yet checks its token cost against
-// the Run's quota or records actual usage via updateRunTokenUsage — that's
-// deferred, same as diff generation (Step 3), which remains a stub pending
-// #4. Wiring cost-quota enforcement to the real plan call is left for a
-// follow-up rather than folded into #3's scope.
+// real model call as of #3, and diff generation (Step 3) is a real model
+// call as of #4, but nothing yet checks either call's token cost against
+// the Run's quota or records actual usage via updateRunTokenUsage. Wiring
+// cost-quota enforcement to the real model calls is left for a follow-up
+// rather than folded into #3/#4's scope.
 export async function processRun(run: WorkerRun): Promise<void> {
   logger.info('processing run', { runId: run.id, status: run.status });
 
@@ -132,14 +131,10 @@ export async function processRun(run: WorkerRun): Promise<void> {
     }
 
     // Step 3: generate the diff now that the plan is approved, then stop.
+    // The diff is not reviewed in this same call — the next tick evaluates
+    // the diff-review gate, same pattern as Step 1/2 for the plan.
     if (run.plan && !run.diff && run.status === 'executing') {
-      const diff: Diff = {
-        files: [
-          { path: 'api/routes/feature.ts', added: 50, removed: 0 },
-          { path: 'components/Feature.tsx', added: 30, removed: 0 },
-        ],
-        summary: 'Added feature endpoints and UI components',
-      };
+      const diff = await diffFromPlan(run.plan);
 
       await db
         .update(runs)
@@ -160,11 +155,16 @@ export async function processRun(run: WorkerRun): Promise<void> {
     // Step 4: evaluate the diff-review gate.
     if (run.plan && run.diff && run.status === 'awaiting_approval') {
       const diffActionClass = classifyActionSafely({ type: 'file_write' });
+      const totalAdded = run.diff.files.reduce((sum, file) => sum + file.added, 0);
+      const totalRemoved = run.diff.files.reduce((sum, file) => sum + file.removed, 0);
       const outcome = await requestApproval(
         run,
         'diff-review',
         diffActionClass,
-        'Diff: 80 lines added across 2 files',
+        // Audit-trail summary for the approvals row — derived from the
+        // real generated diff (see orchestrator/diff.ts) rather than a
+        // fixed string, now that the diff reflects the approved plan.
+        `Diff: ${totalAdded} lines added, ${totalRemoved} lines removed across ${run.diff.files.length} file(s)`,
       );
 
       if (outcome.status === 'pending') {
