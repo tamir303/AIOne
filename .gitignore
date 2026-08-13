@@ -6,9 +6,11 @@
 *.key
 id_rsa*
 secrets/
+nul
 
 # Claude Code local overrides (machine-specific, not shared)
 .claude/settings.local.json
+.claude/worktrees/
 
 # Dependencies & build output
 node_modules/

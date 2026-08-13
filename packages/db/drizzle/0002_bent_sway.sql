@@ -1,0 +1,1 @@
+ALTER TABLE "approvals" ADD COLUMN "gate" varchar(50) NOT NULL;

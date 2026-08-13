@@ -15,8 +15,21 @@ import type { RunId, SessionId, Plan, Diff, TrustTier } from '@aione/core';
 export interface WorkerRun {
   id: RunId;
   sessionId: SessionId;
-  status: 'planning' | 'awaiting_approval' | 'executing' | 'done' | 'failed';
+  status:
+    | 'planning'
+    | 'awaiting_approval'
+    | 'executing'
+    | 'done'
+    | 'failed'
+    | 'rejected'
+    | 'expired';
   plan?: Plan;
   diff?: Diff;
   trustTier: TrustTier;
+  // Cost quota enforcement
+  costQuotaTokens: bigint | null;
+  tokensUsed: bigint;
+  // Idle timeout enforcement
+  idleTimeoutMinutes: number | null;
+  gateEnteredAt: Date | null;
 }
