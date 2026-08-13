@@ -5,11 +5,15 @@ import { createLogger } from '@aione/utils';
 const logger = createLogger('api:gate');
 const router = new Hono();
 
-// POST /gate/plan-review
+// POST /gate/plan-review — body: { runId, decision: 'approved' | 'rejected', reason?: string }
+// This is the only place a human's plan-review decision is recorded. The
+// worker (apps/worker/src/gate/approver.ts) polls this table by
+// (runId, gate) and blocks the Run until a row like this one exists — it
+// never inserts a 'confirm'-tier decision itself.
 router.post('/plan-review', async (c) => {
   try {
     const body = await c.req.json();
-    const { runId, decision } = body;
+    const { runId, decision, reason } = body;
 
     logger.info('plan review', { runId, decision });
 
@@ -19,10 +23,12 @@ router.post('/plan-review', async (c) => {
       .insert(approvals)
       .values({
         runId,
+        gate: 'plan-review',
         actionClass: 'file_write',
         actionSummary: 'Plan review',
         decision: decision === 'approved' ? 'approved' : 'rejected',
         tier: 'balanced',
+        reason: typeof reason === 'string' ? reason : undefined,
       })
       .returning();
 
@@ -33,11 +39,12 @@ router.post('/plan-review', async (c) => {
   }
 });
 
-// POST /gate/diff-review
+// POST /gate/diff-review — body: { runId, decision: 'approved' | 'rejected', reason?: string }
+// Same contract as /plan-review, for the diff-review gate.
 router.post('/diff-review', async (c) => {
   try {
     const body = await c.req.json();
-    const { runId, decision } = body;
+    const { runId, decision, reason } = body;
 
     logger.info('diff review', { runId, decision });
 
@@ -45,10 +52,12 @@ router.post('/diff-review', async (c) => {
       .insert(approvals)
       .values({
         runId,
+        gate: 'diff-review',
         actionClass: 'file_write',
         actionSummary: 'Diff review',
         decision: decision === 'approved' ? 'approved' : 'rejected',
         tier: 'balanced',
+        reason: typeof reason === 'string' ? reason : undefined,
       })
       .returning();
 

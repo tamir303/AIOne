@@ -257,6 +257,13 @@ describe('processRun — cost quota and idle timeout', () => {
       const quota = BigInt(10000);
       const timeoutMinutes = 30;
 
+      // costQuotaTokens/idleTimeoutMinutes are Run-creation-time config,
+      // not something processRun ever writes back to the DB row — seed
+      // them on the row directly first, the same way 'allows a run within
+      // its cost quota to proceed' above seeds tokensUsed.
+      hoisted.runRow.costQuotaTokens = quota;
+      hoisted.runRow.idleTimeoutMinutes = timeoutMinutes;
+
       await processRun(
         currentRun(TIER, {
           costQuotaTokens: quota,

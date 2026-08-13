@@ -51,15 +51,25 @@ function ProjectRun({ projectId }: ProjectRunProps) {
     );
   }
 
-  if (run.status === 'planning' || run.status === 'awaiting_approval') {
-    if (!run.plan) {
-      return <div>Loading plan...</div>;
-    }
+  if (run.status === 'rejected') {
+    return <div>Run rejected at a review gate.</div>;
+  }
 
-    if (!run.diff) {
-      return <PlanReview run={run} onApprove={() => {}} />;
-    }
+  if (run.status === 'planning' || !run.plan) {
+    return <div>Loading plan...</div>;
+  }
 
+  if (run.status === 'awaiting_approval' && !run.diff) {
+    return <PlanReview run={run} onApprove={() => {}} />;
+  }
+
+  // 'executing' means the plan was approved and the diff is being
+  // generated for the next gate — see apps/worker/src/run-loop.ts.
+  if (run.status === 'executing') {
+    return <div>Generating diff...</div>;
+  }
+
+  if (run.status === 'awaiting_approval' && run.diff) {
     return <DiffReview run={run} onApprove={() => {}} />;
   }
 

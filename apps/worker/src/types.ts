@@ -15,7 +15,14 @@ import type { RunId, SessionId, Plan, Diff, TrustTier } from '@aione/core';
 export interface WorkerRun {
   id: RunId;
   sessionId: SessionId;
-  status: 'planning' | 'awaiting_approval' | 'executing' | 'done' | 'failed' | 'expired';
+  status:
+    | 'planning'
+    | 'awaiting_approval'
+    | 'executing'
+    | 'done'
+    | 'failed'
+    | 'rejected'
+    | 'expired';
   plan?: Plan;
   diff?: Diff;
   trustTier: TrustTier;

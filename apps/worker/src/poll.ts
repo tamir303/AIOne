@@ -8,8 +8,12 @@ import type { WorkerRun } from './types.js';
 const logger = createLogger('poll');
 
 // Run -> Session -> Project join to resolve trustTier, which lives on
-// Project rather than Run (see types.ts). Excludes 'done'/'failed'/'expired' so
-// finished runs stop being re-fetched every tick.
+// Project rather than Run (see types.ts). Excludes 'done'/'failed'/'rejected'/
+// 'expired' so runs that can no longer advance on their own stop being
+// re-fetched every tick. 'rejected' means a human said no at a gate — see
+// run-loop.ts — and 'expired' means the Run sat too long waiting on a human
+// decision (see run-enforcement.ts); both are stopping states, not retryable
+// ones, until a later ticket adds a resubmission path.
 async function fetchPendingRuns(): Promise<WorkerRun[]> {
   const rows = await db
     .select({
@@ -31,6 +35,7 @@ async function fetchPendingRuns(): Promise<WorkerRun[]> {
       and(
         ne(runs.status, 'done'),
         ne(runs.status, 'failed'),
+        ne(runs.status, 'rejected'),
         ne(runs.status, 'expired'),
       ),
     );
