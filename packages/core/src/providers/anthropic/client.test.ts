@@ -61,7 +61,7 @@ describe('AnthropicProvider', () => {
     await provider.generateText({ role: 'orchestrator', messages: [] });
     await provider.generateText({ role: 'routing', messages: [] });
 
-    expect(create.mock.calls[0][0].model).toBe('claude-opus-4-8');
+    expect(create.mock.calls[0][0].model).toBe('claude-opus-5');
     expect(create.mock.calls[1][0].model).toBe('claude-haiku-4-5');
   });
 
