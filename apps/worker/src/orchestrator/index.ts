@@ -36,6 +36,15 @@ Rules:
  * of relying on the default, so they never require live credentials or
  * network access.
  *
+ * `onChunk`, if supplied, is called with the *accumulated* text seen so far
+ * every time a new `text-delta` chunk arrives — this is what lets a caller
+ * relay the model's response incrementally rather than only once the full
+ * plan is parsed. run-loop.ts's Step 1 uses this to write progress into
+ * `runs.plan_draft_text`, which `apps/api/src/handlers/runs.ts`'s
+ * `/:runId/plan-stream` endpoint polls and forwards to the web UI via
+ * Vercel AI SDK's `createTextStreamResponse`/`useCompletion` (see issue #3
+ * and CLAUDE.md's "Vercel AI SDK for streaming" convention).
+ *
  * No sandbox execution is dispatched from here (Phase 1/3 land the real
  * lane adapters). When a lane is wired in, it MUST resolve and enforce an
  * egress policy before letting sandboxed code reach the network — see
@@ -45,18 +54,10 @@ Rules:
 export async function planFromPrompt(
   prompt: string,
   provider: ModelProvider = getModelProvider(),
+  onChunk?: (accumulatedText: string) => void | Promise<void>,
 ): Promise<Plan> {
   logger.info('planning', { promptLength: prompt.length });
 
-  // Streamed rather than a single generateText() call: per CLAUDE.md's UI
-  // stack convention ("Vercel AI SDK for streaming"), plan generation is
-  // meant to be visible to the web UI incrementally rather than only after
-  // the full response lands. The worker's poll loop still writes the
-  // *finished* plan to the Run row in one shot (run-loop.ts does exactly one
-  // DB write per tick — see its top-of-file comment), but consuming the
-  // model's streamed chunks here, rather than generateText(), is what lets
-  // a live per-request caller (a future direct HTTP endpoint, not this
-  // poll-based worker) relay `text-delta` chunks onward as they arrive.
   let text = '';
   for await (const chunk of provider.streamText({
     role: 'agent',
@@ -65,6 +66,9 @@ export async function planFromPrompt(
   })) {
     if (chunk.type === 'text-delta') {
       text += chunk.text;
+      if (onChunk) {
+        await onChunk(text);
+      }
     }
   }
 

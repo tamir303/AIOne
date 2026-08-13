@@ -130,6 +130,51 @@ describe('planFromPrompt', () => {
     await expect(planFromPrompt('anything', provider)).rejects.toThrow(/expected Plan shape/);
   });
 
+  it('invokes onChunk with the accumulated text as each text-delta chunk arrives', async () => {
+    const modelResponse = JSON.stringify({
+      steps: [{ role: 'backend', description: 'build the thing' }],
+      rationale: 'because the prompt asked for it',
+    });
+    const provider = stubProvider(modelResponse);
+
+    const seen: string[] = [];
+    const plan = await planFromPrompt('anything', provider, (accumulatedText) => {
+      seen.push(accumulatedText);
+    });
+
+    // stubProvider splits the response into exactly two text-delta chunks
+    // (see its own comment above), so onChunk must fire exactly twice: once
+    // with the first half, once with the full accumulated text.
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toBe(modelResponse.slice(0, Math.floor(modelResponse.length / 2)));
+    expect(seen[1]).toBe(modelResponse);
+    expect(plan.steps[0].description).toBe('build the thing');
+  });
+
+  it('awaits an async onChunk before requesting the next chunk', async () => {
+    const modelResponse = JSON.stringify({
+      steps: [{ role: 'backend', description: 'x' }],
+      rationale: 'y',
+    });
+    const provider = stubProvider(modelResponse);
+
+    const order: string[] = [];
+    await planFromPrompt('anything', provider, async (accumulatedText) => {
+      order.push(`onChunk-start:${accumulatedText.length}`);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      order.push(`onChunk-end:${accumulatedText.length}`);
+    });
+
+    // Each onChunk call fully resolves before the next one starts — proves
+    // planFromPrompt awaits the callback rather than firing it fire-and-forget.
+    expect(order).toEqual([
+      'onChunk-start:' + Math.floor(modelResponse.length / 2),
+      'onChunk-end:' + Math.floor(modelResponse.length / 2),
+      'onChunk-start:' + modelResponse.length,
+      'onChunk-end:' + modelResponse.length,
+    ]);
+  });
+
   it('does not require ANTHROPIC_API_KEY when an explicit provider is supplied', async () => {
     const originalKey = process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;

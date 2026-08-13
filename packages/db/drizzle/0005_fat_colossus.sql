@@ -1,0 +1,1 @@
+ALTER TABLE "runs" ADD COLUMN "plan_draft_text" text;

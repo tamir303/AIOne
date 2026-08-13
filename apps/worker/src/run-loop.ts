@@ -11,10 +11,21 @@ import { checkAndExpireIdleRun, recordGateEntryTime, clearGateEntryTime } from '
 const logger = createLogger('run-loop');
 
 // processRun advances a Run by at most one step per call — see poll.ts.
-// Each call below does exactly one DB write and returns; the plan-review
-// and diff-review gates are each their own step, so a run parked on a
-// human decision costs nothing but a cheap SELECT per tick until that
-// decision shows up.
+// Each step below does exactly one *state-transition* DB write (the write
+// that changes `status`/`plan`/`diff`) and returns; the plan-review and
+// diff-review gates are each their own step, so a run parked on a human
+// decision costs nothing but a cheap SELECT per tick until that decision
+// shows up.
+//
+// Step 1 is a deliberate, bounded exception to "one write per tick": it may
+// also write `planDraftText` several times *during* the same tick, as the
+// model streams its response (see orchestrator/index.ts's `onChunk`). These
+// are progress writes to a display-only column that no gate or state
+// transition ever reads — apps/api/src/handlers/runs.ts's /plan-stream
+// endpoint polls it to relay incremental plan text to the web UI via
+// Vercel AI SDK (see issue #3) — not a second state transition, and they
+// only happen alongside the one real model call this step was already
+// going to make.
 //
 // Cost-quota enforcement (wouldExceedCostQuota in run-enforcement.ts) is
 // intentionally not wired in here yet. Plan generation (Step 1, below) is a
@@ -39,12 +50,24 @@ export async function processRun(run: WorkerRun): Promise<void> {
     // Step 1: generate the plan, then stop. The plan is not reviewed in
     // this same call — the next tick evaluates the plan-review gate.
     if (!run.plan && run.status === 'planning') {
-      const plan = await planFromPrompt(run.prompt);
+      const plan = await planFromPrompt(run.prompt, undefined, async (accumulatedText) => {
+        // Progress write for the /plan-stream endpoint — see the top-of-file
+        // comment on why this doesn't count against "one write per tick".
+        await db
+          .update(runs)
+          .set({ planDraftText: accumulatedText })
+          .where(eq(runs.id, run.id));
+      });
 
       await db
         .update(runs)
         .set({
           plan,
+          // The authoritative plan has landed — the draft column has
+          // served its purpose and would otherwise show stale text if a
+          // later run reused this row's shape in a display that doesn't
+          // check `plan` first.
+          planDraftText: null,
           status: 'awaiting_approval',
           updatedAt: new Date(),
         })

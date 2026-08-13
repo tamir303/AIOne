@@ -35,6 +35,15 @@ export const runs = pgTable('runs', {
   // doesn't fail against any pre-existing rows from before this column
   // existed.
   prompt: text('prompt').notNull().default(''),
+  // Incremental, in-progress plan text written by run-loop.ts's Step 1 as
+  // the model streams its response (see apps/worker/src/orchestrator/
+  // index.ts's onChunk callback) — a display-only progress feed, not part
+  // of the Run's state machine. apps/api/src/handlers/runs.ts's
+  // /:runId/plan-stream endpoint polls this column and relays it to the
+  // web UI via Vercel AI SDK's createTextStreamResponse/useCompletion (see
+  // issue #3). Cleared back to null once the authoritative `plan` column
+  // is written; never read by any gate or state-transition logic.
+  planDraftText: text('plan_draft_text'),
   plan: jsonb('plan'),
   diff: jsonb('diff'),
   status: varchar('status', { length: 50 }).notNull().default('planning'),
