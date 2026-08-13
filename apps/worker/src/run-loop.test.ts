@@ -103,6 +103,31 @@ vi.mock('@aione/utils', async (importOriginal) => {
   };
 });
 
+// This suite exercises the gate mechanism, not plan/diff *content* — #3's
+// planFromPrompt() and #4's diffFromPlan() both make a real model-provider
+// call by default, which must never run in a unit test. Stub both so the
+// gate-transition assertions below are unaffected by (and don't require
+// live credentials for) either call; planFromPrompt's own prompt-reflecting
+// behavior is covered by orchestrator/index.test.ts, and diffFromPlan's own
+// plan-reflecting behavior is covered by orchestrator/diff.test.ts.
+vi.mock('./orchestrator/index.js', () => ({
+  planFromPrompt: async (prompt: string) => ({
+    steps: [{ role: 'backend', description: `stub step for: ${prompt}` }],
+    rationale: 'stub plan for gate-mechanism tests',
+  }),
+}));
+
+vi.mock('./orchestrator/diff.js', () => ({
+  diffFromPlan: vi.fn(async (plan: { steps: Array<{ role: string }> }) => ({
+    files: plan.steps.map((step, i) => ({
+      path: `stub/${step.role}-${i}.ts`,
+      added: 10,
+      removed: 0,
+    })),
+    summary: 'Stub diff for gate tests.',
+  })),
+}));
+
 const { processRun } = await import('./run-loop.js');
 
 // Simulates the next worker poll tick: rebuild the WorkerRun the way
@@ -112,6 +137,7 @@ function currentRun(trustTier: WorkerRun['trustTier']): WorkerRun {
     id: hoisted.runRow.id as RunId,
     sessionId: 'session-1' as SessionId,
     status: hoisted.runRow.status as WorkerRun['status'],
+    prompt: (hoisted.runRow.prompt as string) ?? 'test prompt',
     plan: hoisted.runRow.plan as WorkerRun['plan'],
     diff: hoisted.runRow.diff as WorkerRun['diff'],
     trustTier,
