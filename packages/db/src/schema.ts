@@ -27,6 +27,23 @@ export const runs = pgTable('runs', {
   id: uuid('id').primaryKey().defaultRandom(),
   sessionId: uuid('session_id').notNull().references(() => sessions.id),
   agent: varchar('agent', { length: 50 }).notNull(),
+  // The user's original prompt for this Run. planFromPrompt() (see
+  // apps/worker/src/orchestrator/index.ts) needs this to generate a plan
+  // that actually reflects what was asked, rather than a hardcoded stub —
+  // apps/api/src/handlers/runs.ts writes it at Run-creation time.
+  // Default '' (rather than a NOT NULL-only column) so this migration
+  // doesn't fail against any pre-existing rows from before this column
+  // existed.
+  prompt: text('prompt').notNull().default(''),
+  // Incremental, in-progress plan text written by run-loop.ts's Step 1 as
+  // the model streams its response (see apps/worker/src/orchestrator/
+  // index.ts's onChunk callback) — a display-only progress feed, not part
+  // of the Run's state machine. apps/api/src/handlers/runs.ts's
+  // /:runId/plan-stream endpoint polls this column and relays it to the
+  // web UI via Vercel AI SDK's createTextStreamResponse/useCompletion (see
+  // issue #3). Cleared back to null once the authoritative `plan` column
+  // is written; never read by any gate or state-transition logic.
+  planDraftText: text('plan_draft_text'),
   plan: jsonb('plan'),
   diff: jsonb('diff'),
   status: varchar('status', { length: 50 }).notNull().default('planning'),

@@ -5,6 +5,7 @@ import { useRun } from './hooks/useRun.js';
 import PlanReview from './pages/PlanReview.js';
 import DiffReview from './pages/DiffReview.js';
 import Workspaces from './pages/Workspaces.js';
+import PlanStream from './components/PlanStream.js';
 
 const headerStyle = {
   display: 'flex',
@@ -31,12 +32,18 @@ interface ProjectRunProps {
 function ProjectRun({ projectId }: ProjectRunProps) {
   const { getToken } = useAuth();
   const [runId, setRunId] = useState<string | null>(null);
+  const [prompt, setPrompt] = useState('');
+  // Kept around (rather than re-fetched) so PlanStream's useCompletion call
+  // can authenticate against /api/runs/:runId/plan-stream without a second
+  // getToken() round-trip while the plan is generating.
+  const [token, setToken] = useState<string | null>(null);
   const run = useRun(runId);
 
   const handleStart = async () => {
-    const token = await getToken();
-    if (!token) return;
-    const created = await submitPrompt(token, projectId, 'demo prompt');
+    const fetchedToken = await getToken();
+    if (!fetchedToken || !prompt.trim()) return;
+    setToken(fetchedToken);
+    const created = await submitPrompt(fetchedToken, projectId, prompt.trim());
     setRunId(created.id);
   };
 
@@ -44,8 +51,15 @@ function ProjectRun({ projectId }: ProjectRunProps) {
     return (
       <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
         <h1>AIOne - Vertical Slice</h1>
-        <button onClick={handleStart} style={primaryButtonStyle}>
-          Start Demo Run
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          placeholder="Describe what you want built..."
+          rows={4}
+          style={{ width: '100%', marginBottom: '1rem', fontSize: '1rem', padding: '0.5rem' }}
+        />
+        <button onClick={handleStart} disabled={!prompt.trim()} style={primaryButtonStyle}>
+          Start Run
         </button>
       </div>
     );
@@ -56,7 +70,12 @@ function ProjectRun({ projectId }: ProjectRunProps) {
   }
 
   if (run.status === 'planning' || !run.plan) {
-    return <div>Loading plan...</div>;
+    return (
+      <div style={{ padding: '2rem', maxWidth: '600px', margin: '0 auto' }}>
+        <div>Generating plan...</div>
+        {token && <PlanStream runId={run.id} token={token} />}
+      </div>
+    );
   }
 
   if (run.status === 'awaiting_approval' && !run.diff) {

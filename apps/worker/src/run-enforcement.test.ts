@@ -68,6 +68,7 @@ describe('run-enforcement', () => {
       const run: WorkerRun = {
         id: 'run-1' as RunId,
         sessionId: 'session-1' as SessionId,
+        prompt: 'test prompt',
         status: 'awaiting_approval',
         trustTier: 'balanced',
         costQuotaTokens: null,
@@ -92,6 +93,7 @@ describe('run-enforcement', () => {
       const run: WorkerRun = {
         id: 'run-1' as RunId,
         sessionId: 'session-1' as SessionId,
+        prompt: 'test prompt',
         status: 'awaiting_approval',
         trustTier: 'balanced',
         costQuotaTokens: null,
@@ -112,6 +114,7 @@ describe('run-enforcement', () => {
       const run: WorkerRun = {
         id: 'run-1' as RunId,
         sessionId: 'session-1' as SessionId,
+        prompt: 'test prompt',
         status: 'planning',
         trustTier: 'balanced',
         costQuotaTokens: null,
@@ -134,6 +137,7 @@ describe('run-enforcement', () => {
       const run: WorkerRun = {
         id: 'run-1' as RunId,
         sessionId: 'session-1' as SessionId,
+        prompt: 'test prompt',
         status: 'awaiting_approval',
         trustTier: 'balanced',
         costQuotaTokens: null,

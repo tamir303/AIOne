@@ -41,6 +41,10 @@ export interface Run {
   id: RunId;
   sessionId: SessionId;
   agent: 'orchestrator' | 'frontend' | 'backend' | 'devops' | 'fullstack';
+  // The user's original prompt, persisted at Run-creation time so
+  // planFromPrompt() has the real input to generate a plan from rather than
+  // a hardcoded stub — see apps/worker/src/orchestrator/index.ts.
+  prompt: string;
   plan?: Plan;
   diff?: Diff;
   status: 'planning' | 'awaiting_approval' | 'executing' | 'done' | 'failed' | 'rejected';

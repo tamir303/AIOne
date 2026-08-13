@@ -11,6 +11,7 @@
     "lint": "eslint src --ext .ts,.tsx"
   },
   "dependencies": {
+    "@ai-sdk/react": "^4.0.67",
     "@aione/core": "workspace:*",
     "@clerk/react": "^6.13.1",
     "react": "^18.2.0",

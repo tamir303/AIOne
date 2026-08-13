@@ -15,9 +15,10 @@
     "@aione/utils": "workspace:*",
     "@clerk/hono": "^0.1.0",
     "@hono/node-server": "^1.8.0",
+    "ai": "^7.0.64",
+    "dotenv": "^16.0.0",
     "drizzle-orm": "^0.29.0",
-    "hono": "^4.0.0",
-    "dotenv": "^16.0.0"
+    "hono": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
