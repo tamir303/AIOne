@@ -10,9 +10,12 @@
     "build": "tsc",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "test": "node --import tsx/esm --test src/**/*.test.ts"
   },
   "devDependencies": {
+    "@types/node": "^20.19.43",
+    "tsx": "^4.23.12",
     "typescript": "^5.3.0"
   }
 }

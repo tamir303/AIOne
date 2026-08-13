@@ -1,5 +1,5 @@
-import { pgTable, text, timestamp, uuid, varchar, jsonb } from 'drizzle-orm/pg-core';
-import { InferSelectModel } from 'drizzle-orm';
+import { pgTable, text, timestamp, uuid, varchar, jsonb, integer, bigint } from 'drizzle-orm/pg-core';
+import { InferSelectModel, sql } from 'drizzle-orm';
 
 // Clerk handles user auth; we only store the user ID
 export const workspaces = pgTable('workspaces', {
@@ -30,6 +30,17 @@ export const runs = pgTable('runs', {
   plan: jsonb('plan'),
   diff: jsonb('diff'),
   status: varchar('status', { length: 50 }).notNull().default('planning'),
+  // Cost quota: max tokens allowed for this run (null = unlimited)
+  costQuotaTokens: bigint('cost_quota_tokens', { mode: 'bigint' }),
+  // Tokens used so far in this run (accumulated across model calls)
+  // `sql\`0\`` rather than `BigInt(0)`: drizzle-kit's snapshot diffing
+  // JSON.stringify()s column defaults, which throws on a raw bigint value.
+  // An SQL default expression avoids that while still typing correctly.
+  tokensUsed: bigint('tokens_used', { mode: 'bigint' }).notNull().default(sql`0`),
+  // Idle timeout: how many minutes a run can wait at a gate (null = no timeout)
+  idleTimeoutMinutes: integer('idle_timeout_minutes'),
+  // When the run entered a gate-blocked state (awaiting_approval), null if not at gate
+  gateEnteredAt: timestamp('gate_entered_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

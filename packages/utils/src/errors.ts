@@ -37,3 +37,15 @@ export class GateError extends AppError {
     this.name = 'GateError';
   }
 }
+
+export class EgressDeniedError extends AppError {
+  constructor(host: string, details?: Record<string, any>) {
+    super(
+      'EGRESS_DENIED',
+      `Egress to "${host}" is denied: sandbox egress is default-deny and this host is not on the allowlist`,
+      403,
+      details,
+    );
+    this.name = 'EgressDeniedError';
+  }
+}

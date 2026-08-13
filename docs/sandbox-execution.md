@@ -68,6 +68,8 @@ Both from spec §14, both required from day one rather than retrofitted:
 
 The threat this closes: a prompt-injected agent generating code that exfiltrates the workspace on first run. Sandboxing alone does not stop that — the sandbox is doing its job while the data leaves.
 
+**Status.** The policy and enforcement seam described above are implemented ahead of any real lane: `packages/core/src/egress-policy.ts` defines the default-deny policy and its allowlist mechanism, and `apps/worker/src/orchestrator/egress.ts` is the seam a future lane adapter calls before letting sandboxed code reach the network. No `SandboxLane` adapter exists yet — that's Phase 1 (WebContainers) and Phase 3 (E2B, remote builder) work — so nothing calls this seam in a live path today. Quotas and idle timeouts (the other half of this section) are not yet implemented.
+
 ## Preview URLs
 
 WebContainers previews are same-origin to the tab and free. E2B previews need a proxy with a per-session token; they must never be guessable URLs, because a preview of an in-progress app frequently has auth disabled.
