@@ -1,5 +1,22 @@
 version: '3.9'
 services:
+  # Single Postgres instance holding both roles migration
+  # 0001_sharp_scalphunter.sql creates: `aione` (the owner/migration role —
+  # this container's superuser) and `aione_app` (the least-privilege
+  # runtime role, restricted to SELECT/INSERT on `approvals`). They're two
+  # roles inside one database, not two services, so there's nothing to add
+  # here beyond this container.
+  #
+  # After `docker-compose up -d`, set up both roles the same way CI does
+  # (.github/workflows/ci.yml):
+  #   pnpm --filter @aione/db migrate            # owner role, creates aione_app
+  #   pnpm --filter @aione/db set-app-password   # sets aione_app's password
+  #
+  # The second command reads AIONE_APP_DB_PASSWORD from the environment
+  # (repo-root `.env`, gitignored) — never a literal in this file or in the
+  # migration. See packages/db/src/set-app-role-password.ts for the full
+  # explanation and for the DATABASE_MIGRATION_URL / DATABASE_URL
+  # connection-string convention downstream tests rely on.
   postgres:
     image: postgres:16-alpine
     environment:

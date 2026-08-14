@@ -10,6 +10,49 @@ jobs:
   ci:
     name: ci
     runs-on: ubuntu-latest
+    # Docker-based service container (not a Neon branch): the guarantees
+    # tested against it — schema round-trip, the `approvals` table being
+    # append-only at the database level — don't depend on Neon-specific
+    # behavior, and a container is faster and cheaper for every PR run.
+    # GitHub Actions won't move on to `steps` until this container's
+    # healthcheck passes, so Postgres is guaranteed ready before "Install
+    # dependencies" runs.
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          # Matches docker-compose.yml's local-dev default. This is an
+          # ephemeral, single-job service container with no reachability
+          # outside the runner — not a credential that protects anything —
+          # so it's fine as a literal here, unlike the aione_app password
+          # below.
+          POSTGRES_DB: aione
+          POSTGRES_USER: aione
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U aione"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # Owner/migration role — full rights, including on `approvals`. Used
+      # to run migrations and to set the aione_app role's password
+      # out-of-band (see packages/db/src/set-app-role-password.ts).
+      DATABASE_MIGRATION_URL: postgres://aione:password@localhost:5432/aione
+      # Runtime aione_app role — same database, least-privilege role that
+      # migration 0001_sharp_scalphunter.sql creates (no UPDATE/DELETE on
+      # approvals). Downstream tests (#16, #17) should use this connection
+      # string, not DATABASE_MIGRATION_URL, when testing what the app role
+      # can and can't do — the append-only guarantee is only meaningful if
+      # tested through the role it actually restricts.
+      #
+      # The password is never a literal: it's the AIONE_APP_DB_PASSWORD
+      # GitHub Actions secret, referenced by name (CLAUDE.md rule #2).
+      # GitHub Actions masks the secret's value in logs wherever it's
+      # interpolated, including here.
+      DATABASE_URL: postgres://aione_app:${{ secrets.AIONE_APP_DB_PASSWORD }}@localhost:5432/aione
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -36,6 +79,23 @@ jobs:
       # apps/* that consume them.
       - name: Build
         run: pnpm -r build
+
+      # Owner role runs the migrations, including creating aione_app (see
+      # packages/db/drizzle/0001_sharp_scalphunter.sql) — but that
+      # migration deliberately leaves aione_app's password unset, since a
+      # migration file is a repo file and passwords don't belong there.
+      - name: Run database migrations
+        run: pnpm --filter @aione/db migrate
+
+      # Sets aione_app's password out-of-band, from the GitHub Actions
+      # secret referenced by name — see
+      # packages/db/src/set-app-role-password.ts for the full explanation
+      # and for the DATABASE_MIGRATION_URL / DATABASE_URL convention
+      # downstream test tickets should build on.
+      - name: Set aione_app role password
+        run: pnpm --filter @aione/db set-app-password
+        env:
+          AIONE_APP_DB_PASSWORD: ${{ secrets.AIONE_APP_DB_PASSWORD }}
 
       - name: Type check
         run: pnpm -r type-check

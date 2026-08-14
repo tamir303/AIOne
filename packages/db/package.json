@@ -9,6 +9,7 @@
   "scripts": {
     "build": "tsc",
     "migrate": "node --import tsx/esm src/migrate.ts",
+    "set-app-password": "node --import tsx/esm src/set-app-role-password.ts",
     "generate": "drizzle-kit generate:pg",
     "type-check": "tsc --noEmit",
     "lint": "eslint src --ext .ts"
