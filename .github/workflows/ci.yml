@@ -48,11 +48,15 @@ jobs:
       # can and can't do — the append-only guarantee is only meaningful if
       # tested through the role it actually restricts.
       #
-      # The password is never a literal: it's the AIONE_APP_DB_PASSWORD
-      # GitHub Actions secret, referenced by name (CLAUDE.md rule #2).
-      # GitHub Actions masks the secret's value in logs wherever it's
-      # interpolated, including here.
-      DATABASE_URL: postgres://aione_app:${{ secrets.AIONE_APP_DB_PASSWORD }}@localhost:5432/aione
+      # DATABASE_URL itself is NOT set here as a static literal: the
+      # AIONE_APP_DB_PASSWORD secret isn't guaranteed to be URL-safe (it may
+      # contain `/`, `@`, `:`, `#`, `?`, `%`, etc.), so interpolating it
+      # directly into a postgres:// literal can produce a string that isn't
+      # a valid URL and makes URL-parsing clients (e.g. the `postgres` npm
+      # package) throw. It's computed with percent-encoding instead, in the
+      # "Compute DATABASE_URL" step below (right after the password is set),
+      # and exported via $GITHUB_ENV so it's available to Type check / Lint
+      # / Test.
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -94,6 +98,18 @@ jobs:
       # downstream test tickets should build on.
       - name: Set aione_app role password
         run: pnpm --filter @aione/db set-app-password
+        env:
+          AIONE_APP_DB_PASSWORD: ${{ secrets.AIONE_APP_DB_PASSWORD }}
+
+      # Percent-encodes the password before building DATABASE_URL, so any
+      # URL-unsafe character in AIONE_APP_DB_PASSWORD (`/`, `@`, `:`, `#`,
+      # `?`, `%`, ...) can't produce a malformed connection string — see
+      # issue #26. The result is written to $GITHUB_ENV (not job-level
+      # env:), so it's available to every step from here on without ever
+      # writing the password itself to a repo file.
+      - name: Compute DATABASE_URL
+        run: |
+          node -e "console.log('DATABASE_URL=postgres://aione_app:' + encodeURIComponent(process.env.AIONE_APP_DB_PASSWORD) + '@localhost:5432/aione')" >> "$GITHUB_ENV"
         env:
           AIONE_APP_DB_PASSWORD: ${{ secrets.AIONE_APP_DB_PASSWORD }}
 
