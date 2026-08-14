@@ -6,9 +6,14 @@ Expands spec §13. Each phase has an exit criterion — a thing that must be *de
 
 Platform auth, the Workspace/Project/Session/Run/Deployment schema, bare app shell.
 
-**Exit:** a user can sign in, create a Workspace and Project, and the schema round-trips. The Approvals table exists and is append-only at the database level.
+**Exit (met):** a user can sign in, create a Workspace and Project, and the schema round-trips. The Approvals table exists and is append-only at the database level.
 
-Build the approval schema now even though nothing writes to it yet. Retrofitting an audit trail onto live data is the expensive version.
+Proof:
+- Schema round-trip integrity: [`packages/db/src/schema.round-trip.test.ts`](../packages/db/src/schema.round-trip.test.ts) — tests foreign keys, defaults, and ON DELETE behavior.
+- Approvals table append-only guarantee at DB level: [`packages/db/src/approvals-append-only.test.ts`](../packages/db/src/approvals-append-only.test.ts) — verifies `aione_app` role cannot UPDATE or DELETE approval records despite being able to INSERT and SELECT.
+- Sign-in / create-Workspace / create-Project flow: [`apps/api/src/handlers/workspaces.test.ts`](../apps/api/src/handlers/workspaces.test.ts) — integration tests of the auth boundary and the core user-journey handlers.
+
+All three test suites run in CI per [`.github/workflows/ci.yml`](../.github/workflows/ci.yml) (`pnpm -r test` step).
 
 ## Phase 1 — Manual IDE core
 
