@@ -23,5 +23,6 @@ An ADR records a decision that is expensive to reverse, at the moment it's made,
 | [0007](0007-monorepo-vite-hono-worker.md) | pnpm monorepo: Vite SPA + Hono API + separate agent worker | Accepted |
 | [0008](0008-clerk-neon-drizzle-for-platform.md) | Platform auth and database: Clerk + Neon Postgres + Drizzle | Accepted |
 | [0009](0009-thin-slice-before-phases.md) | Thin vertical slice through the entire loop before building phases | Accepted |
+| [0010](0010-postgres-table-for-project-files.md) | Project files are stored in a Postgres table, not git, until a sandbox lane exists | Accepted |
 
 Template: [template.md](template.md).
