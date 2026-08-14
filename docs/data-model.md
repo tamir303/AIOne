@@ -39,14 +39,13 @@ Workspace → Project → Session (one vibe request or manual edit session)
 type Approval = {
   id: string;
   run_id: string;
-  action_class: ActionClass;      // 'file_write' | 'push' | 'registry_push' | 'deploy' | 'destructive' | ...
+  gate: string;                   // 'plan-review' | 'diff-review' | etc.; disambiguates which checkpoint this decision belongs to
+  action_class: string;           // 'file_write' | 'push' | 'registry_push' | 'deploy' | 'destructive' | ...
   action_summary: string;         // exactly what the user was shown
-  tier_at_time: TrustTier;        // tiers change; this must not be recomputed
   decision: 'approved' | 'rejected';
-  decided_by: UserId;
-  decided_at: timestamp;
+  tier: string;                   // trust tier at time of decision; tiers change and this must not be recomputed
   reason?: string;                // user's note, especially on reject
-  resource_ref?: string;          // 'table:invoices', 'app:acme-prod'
+  decided_at: timestamp;          // when the decision was recorded (defaults to now)
 };
 ```
 
@@ -54,7 +53,7 @@ Three properties are load-bearing:
 
 - **Append-only.** Approvals are never updated or deleted. An amendable audit log is not an audit log.
 - **`action_summary` is the rendered text the user actually saw**, stored verbatim — not a template ID resolved at read time. If the template changes, the historical record must still show what was on screen.
-- **`tier_at_time` is denormalized on purpose.** Reconstructing "what tier were they in six weeks ago" from a changelog is exactly the query that fails when you need it.
+- **`tier` is denormalized on purpose.** Reconstructing "what tier were they in six weeks ago" from a changelog is exactly the query that fails when you need it.
 
 Retention: approvals outlive the Run, the Session, and Project deletion. They are the compliance artifact.
 
