@@ -5,6 +5,7 @@ import gateRouter from './handlers/gate.js';
 import eventsRouter from './handlers/events.js';
 import runsRouter from './handlers/runs.js';
 import workspacesRouter, { projectsRouter } from './handlers/workspaces.js';
+import filesRouter from './handlers/files.js';
 import { errorMiddleware } from './middleware/errors.js';
 
 // Builds the Hono app (routes, middleware, Clerk wiring) without starting a
@@ -41,6 +42,11 @@ app.route('/events', eventsRouter);
 app.route('/runs', runsRouter);
 app.route('/workspaces', workspacesRouter);
 app.route('/projects', projectsRouter);
+// filesRouter declares its own `/:projectId/files...` routes and is mounted
+// under the same `/projects` prefix as projectsRouter above — Hono merges
+// routers mounted at the same base path rather than requiring one router
+// per prefix.
+app.route('/projects', filesRouter);
 
 // Health check
 app.get('/health', (c) => c.json({ ok: true }));

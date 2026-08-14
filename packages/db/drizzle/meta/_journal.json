@@ -43,6 +43,20 @@
       "when": 1786643999820,
       "tag": "0005_fat_colossus",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1786744466789,
+      "tag": "0006_brown_shriek",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1786744466790,
+      "tag": "0007_project_files_grants",
+      "breakpoints": true
     }
   ]
 }

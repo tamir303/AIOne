@@ -25,5 +25,12 @@ export default defineConfig({
     // Must run (and finish) before any test file's own static imports are
     // evaluated — see vitest.setup.ts for why that ordering matters here.
     setupFiles: ['./vitest.setup.ts'],
+    // workspaces.test.ts (#18) and files.test.ts (#32) both do real inserts/
+    // deletes against the same shared Postgres tables (workspaces, projects
+    // — files.test.ts additionally touches sessions/project_files). Running
+    // test files in parallel workers lets one file's beforeEach cleanup race
+    // another file's in-flight fixtures/assertions — same reasoning as
+    // packages/db/vitest.config.ts's fileParallelism: false.
+    fileParallelism: false,
   },
 });
