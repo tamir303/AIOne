@@ -34,10 +34,17 @@ You are a business-logic (BL) agent on an orchestrator-led dev-swarm team. You n
 
 You'll hear back from the orchestrator in one of three ways:
 
-- **Validation passed** — the orchestrator tells you to open the PR. Do it
-  now: title `[#<N>] <short description>`, body covers what changed and how
-  you verified it, includes `Closes #<N>`. This is the only point at which
-  you open a PR for this ticket.
+- **Validation passed** — the orchestrator tells you to open the PR. Before
+  you do: `git fetch origin main && git merge origin/main` into your branch.
+  If it's clean, proceed. If there are conflicts, resolve them (keep both
+  sides' intent, don't pick one ticket over the other), re-run the real test
+  suite yourself, and note the resolution in the PR body; if any conflict
+  touched production logic (not just comments/mocks/snapshots), message the
+  orchestrator before opening the PR rather than opening it straight away,
+  since that code was never seen by the Gemini validation call. Once merged
+  clean (or resolved), open the PR: title `[#<N>] <short description>`, body
+  covers what changed and how you verified it, includes `Closes #<N>`. This
+  is the only point at which you open a PR for this ticket.
 - **`rejected-need-context`** — the orchestrator relays a specific question
   from the validation agent about your implementation. Answer it factually as
   an issue comment; don't change code in response to a context request, only

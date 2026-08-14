@@ -11,6 +11,7 @@ nul
 # Claude Code local overrides (machine-specific, not shared)
 .claude/settings.local.json
 .claude/worktrees/
+.obsidian/
 
 # Dependencies & build output
 node_modules/

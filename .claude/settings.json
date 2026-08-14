@@ -25,9 +25,7 @@
       "Bash(flyctl logs:*)",
       "Bash(gh pr view:*)",
       "Bash(gh run view:*)",
-      "Bash(gh run list:*)"
-    ],
-    "ask": [
+      "Bash(gh run list:*)",
       "Bash(git push:*)",
       "Bash(gh pr create:*)",
       "Bash(gh pr merge:*)",

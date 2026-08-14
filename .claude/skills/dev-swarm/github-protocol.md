@@ -44,6 +44,11 @@ If a teammate can't proceed for any reason, it comments on the issue with the sp
   - How it was verified (which tests were run, what the validation agent's Gemini call reported)
   - `Closes #<issue-number>` so merging auto-closes the ticket
 - **Opened only at `swarm:done`**, by the BL agent, after validation has already passed — not at the point the BL agent finishes writing code. There is no PR to review during validation; the validation agent works directly against the branch (`git diff main...swarm/issue-<N>`).
+- **Merge current `main` into the branch before opening the PR.** A ticket can sit in implementation and validation for a while, during which other tickets merge into `main` — this is the point where the BL agent catches up, not before. `git fetch origin main && git merge origin/main`:
+  - **Clean merge, no conflicts**: open the PR as normal.
+  - **Conflicts in non-production files** (comments, test mocks, generated snapshots): resolve by keeping both sides' intent (don't pick one ticket's change over the other's), re-run the real test suite yourself, note the resolution in the PR body, and open the PR — no re-validation needed.
+  - **Conflicts touching production logic**: resolve them, re-run the test suite, but message the orchestrator before opening the PR rather than opening it straight away — the merge introduced code the Gemini validation call never saw, and the orchestrator decides whether that warrants a re-validation pass.
+  - This step exists because a squash merge takes the PR branch's file contents wholesale for anything the branch touched relative to its own fork point; a branch that never caught up with `main` can silently revert an unrelated fix that landed on `main` after the branch was created. That's a real regression this swarm hit in practice, not a hypothetical.
 - One ticket, one PR. If a BL agent discovers mid-implementation that the ticket is really two tickets, it should say so on the issue rather than bundling unrelated changes into one PR.
 
 ## Approval rule
@@ -63,6 +68,8 @@ gh pr merge <N> --squash --auto
 ```
 
 `--auto` enables GitHub's native auto-merge, which waits for required status checks to pass before actually merging — but only if a status check is actually marked *required* on `main`. This repo defines a `ci` job in `.github/workflows/ci.yml`, but a workflow existing doesn't by itself make it a required check; that's branch-protection state, not something this repo's files confirm. Verify with `gh api repos/:owner/:repo/branches/main/protection --jq .required_status_checks.contexts` before relying on `--auto` as a real gate — don't assume it's enforced just because the workflow exists. If a repository doesn't have auto-merge enabled (`gh api repos/:owner/:repo --jq .allow_auto_merge`), drop `--auto` and merge directly; just be aware that in that case nothing is gating the merge on CI at all.
+
+**Sync local `main` right after merging.** The orchestrator's own local checkout does not update itself just because `gh pr merge` ran — that only advances `origin/main`. Run `git fetch origin main` immediately after every merge, and reconcile the local `main` branch before reading any file from it or reasoning about repo state. This matters concretely: a stale local `main` will show pre-merge file contents (a component that's actually there will look missing, a fix that already landed will look reverted), which is a real trap for anything the orchestrator does after a merge — reviewing the next PR, assessing project state, briefing a new teammate. If local `main` has its own divergent commit history (e.g. from squash-merges elsewhere rewriting SHAs for content that's also sitting on local `main` directly), diff local `main` against `origin/main` first to confirm they're content-equivalent modulo the new merge, stash any uncommitted work, then fast-forward or reset local `main` to `origin/main` — never assume a plain `git merge` will be clean once history has diverged like that.
 
 ## Rejection loops
 
