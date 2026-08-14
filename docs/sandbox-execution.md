@@ -74,6 +74,49 @@ The threat this closes: a prompt-injected agent generating code that exfiltrates
 
 WebContainers previews are same-origin to the tab and free. E2B previews need a proxy with a per-session token; they must never be guessable URLs, because a preview of an in-progress app frequently has auth disabled.
 
+## Cross-origin isolation (COOP/COEP), and Clerk
+
+WebContainers (rule 4 above, the common case) needs `SharedArrayBuffer`, which the browser only exposes when the page is **cross-origin isolated**. That requires the serving origin to send, on the top-level document response:
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+`apps/web/vite.config.ts` sets both headers on the Vite `server` (dev) and `preview` config, so `pnpm --filter @aione/web dev` and `vite preview` are already cross-origin isolated. `apps/web/src/main.tsx` checks `window.crossOriginIsolated` at startup via `apps/web/src/lib/crossOriginIsolation.ts` and logs a dev-time `console.warn` (not a crash) if it's ever false — a silently-false isolation flag is what turns into a confusing "SharedArrayBuffer is not defined" failure much later, once WebContainers is actually wired in.
+
+**Clerk was verified compatible with `require-corp` — no fallback to `credentialless` was needed.** Phase 0 shipped `@clerk/react`, which loads its script bundle, UI chunks, and modal/avatar assets from the signing app's own `*.clerk.accounts.dev` (or `clerk.<app-domain>` in production) origin, plus a Cloudflare Turnstile bot-check iframe. COEP `require-corp` blocks any cross-origin subresource that doesn't opt in via `Cross-Origin-Resource-Policy` or a CORS response — so this had to be checked empirically, not assumed from docs, per the investigation below.
+
+**What was actually run:** the Vite dev server was started with the headers above, and a headless Chromium session (Playwright) was pointed at `http://localhost:5173`, using a real, disposable Clerk "keyless"/accountless dev instance (Clerk's own no-signup bootstrap endpoint, `POST https://api.clerk.com/v1/accountless_applications` — the same mechanism `@clerk/nextjs` uses for zero-config local dev) so the test exercised real Clerk infrastructure rather than a stub.
+
+Findings:
+
+- `window.crossOriginIsolated` was `true` on load.
+- The `SignInButton`/`SignUpButton` modal (`mode="modal"`) opened and rendered completely: email field, password field, "Continue with Google" social button, and the Clerk-branded footer all displayed and were interactive.
+- Every Clerk-origin network response observed (`*.clerk.accounts.dev/npm/@clerk/clerk-js@…`, `@clerk/ui@…` chunks, `img.clerk.com/static/*.svg`, and the Clerk API calls to `/v1/client`, `/v1/environment`, `/v1/dev_browser`) came back `200`/`307` with either `Cross-Origin-Resource-Policy: cross-origin` or a permissive CORS `Access-Control-Allow-Origin: *` — exactly what `require-corp` requires from a cross-origin subresource, and none were blocked (`net::ERR_BLOCKED_BY_RESPONSE`, the signature of a COEP block, never appeared).
+- The sign-up flow's Cloudflare Turnstile bot-check also rendered as a working cross-origin iframe under `require-corp` (iframes aren't subject to the same-origin-or-CORP restriction that COEP applies to fetch/script/img subresources).
+- The one failed request seen (`net::ERR_NAME_NOT_RESOLVED` for a Turnstile challenge-escalation sub-host) was a DNS failure, not a COEP block, and didn't stop the visible modal from working.
+- Headless-browser bot detection (expected and unrelated to COEP) blocked completing a full OTP-verified sign-in in the automated test, so `UserButton`'s post-auth render wasn't captured by screenshot; but `UserButton` ships in the same `@clerk/ui` bundle and reads assets from the same `img.clerk.com` origin already proven to load cleanly under `require-corp`, so there's no COEP-specific reason to expect it to differ from the sign-in modal.
+
+Given `require-corp` worked cleanly, `credentialless` was not tried — the ticket that prompted this section only called for it as a fallback if `require-corp` broke Clerk.
+
+### Production hosting headers
+
+The two headers above are set by Vite for `dev`/`preview` only — they do **not** carry over to however `apps/web`'s built `dist/` output ends up served in production (Fly.io, a static host, a CDN, or a reverse proxy in front of one). Whatever serves the SPA's `index.html` in production must set the same two headers on that response (and it's simplest to set them on every response from that host):
+
+```
+Cross-Origin-Opener-Policy: same-origin
+Cross-Origin-Embedder-Policy: require-corp
+```
+
+Concretely, depending on what ends up fronting the built assets:
+
+- **Static host / CDN with a headers file** (e.g. a `_headers` file convention): add a rule matching `/*` with the two headers above.
+- **Nginx or another reverse proxy:** `add_header Cross-Origin-Opener-Policy same-origin;` and `add_header Cross-Origin-Embedder-Policy require-corp;` in the relevant `server`/`location` block.
+- **Served through a Hono app** (as `apps/api` already is): a small middleware setting both response headers before the static handler, mirroring `apps/web/vite.config.ts`'s `crossOriginIsolationHeaders`.
+
+Whoever picks the production host for `apps/web` should carry this header pair over as part of that decision, not rediscover it — this is the note the WebContainers/Monaco/xterm tickets depend on.
+
 ## Related
 
 - [architecture.md](architecture.md) · [docker-pipeline.md](docker-pipeline.md) · [security.md](security.md)
