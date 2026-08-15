@@ -13,9 +13,18 @@ afterEach(() => {
   cleanup();
 });
 
-vi.mock('@clerk/react', () => ({
-  useAuth: () => ({ getToken: async () => 'test-token' }),
-}));
+// `getToken` must be a stable function reference across renders here, the
+// same way @clerk/react's real useAuth() memoizes it (useCallback, keyed on
+// clerkStatus) — FileTree's fetch effect correctly depends on `getToken`
+// (see FileTree.tsx), and a fresh closure per render would make this mock
+// diverge from Clerk's real behavior and cause the effect to refire every
+// render instead of only when projectId/reloadToken change.
+vi.mock('@clerk/react', () => {
+  const getToken = async () => 'test-token';
+  return {
+    useAuth: () => ({ getToken }),
+  };
+});
 
 vi.mock('../api.js', () => ({
   listProjectFiles: vi.fn(),

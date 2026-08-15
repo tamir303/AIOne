@@ -257,13 +257,7 @@ export default function FileTree({ projectId, onSelectFile }: FileTreeProps) {
     return () => {
       cancelled = true;
     };
-    // `getToken` is intentionally omitted: no react-hooks lint plugin is
-    // configured in this repo (see PlanStream.tsx for the same pattern), and
-    // depending on it here would re-run this effect on every render rather
-    // than only when projectId/reloadToken change, since it's not a
-    // memoized reference. Fetching only happens once per project (plus on
-    // explicit refetch), matching Workspaces.tsx's equivalent effect.
-  }, [projectId, reloadToken]);
+  }, [getToken, projectId, reloadToken]);
 
   const tree = useMemo(() => buildTree(files ?? []), [files]);
 
