@@ -1,17 +1,15 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, fireEvent, cleanup } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import FileTree from './FileTree.js';
 import * as api from '../api.js';
 
-// This project's vitest.config.ts doesn't set `test.globals: true`, so
-// @testing-library/react's automatic afterEach(cleanup) (which relies on a
-// global `afterEach` being present) never registers — Workspaces.test.tsx
-// gets away without this because it only renders once per file. This file
-// renders several times, so cleanup has to be explicit or state updates
-// from an earlier test's still-mounted component leak into the next one.
-afterEach(() => {
-  cleanup();
-});
+// This file used to register its own afterEach(cleanup) here, since this
+// project's vitest.config.ts doesn't set `test.globals: true` (so
+// @testing-library/react's automatic cleanup, which relies on a global
+// `afterEach` existing, never registered) — needed because, unlike
+// Workspaces.test.tsx, this file renders more than once per test file. #38
+// added that same fix globally in apps/web/src/test/setup.ts, so the
+// file-scoped version here is redundant now and has been removed.
 
 // `getToken` must be a stable function reference across renders here, the
 // same way @clerk/react's real useAuth() memoizes it (useCallback, keyed on
