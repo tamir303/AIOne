@@ -1,7 +1,70 @@
-import { Run, Approval, Workspace, Project } from '@aione/core';
+import { Run, Approval, Workspace, Project, ProjectFile } from '@aione/core';
 
 function authHeaders(token: string): HeadersInit {
   return { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+}
+
+// Unlike the fetch helpers above (which assume success and let a bad
+// response surface as a JSON-parse error further down the call stack), the
+// project-files helpers below are consumed by FileTree, which the ticket
+// requires to show a real error state on fetch failure — so these check
+// `res.ok` and throw with the server's own message where there is one.
+async function parseJsonOrThrow<T>(res: Response): Promise<T> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => null);
+    const message = body && typeof body.error === 'string' ? body.error : `Request failed with status ${res.status}`;
+    throw new Error(message);
+  }
+  return res.json();
+}
+
+export async function listProjectFiles(token: string, projectId: string): Promise<ProjectFile[]> {
+  const res = await fetch(`/api/projects/${projectId}/files`, { headers: authHeaders(token) });
+  return parseJsonOrThrow<ProjectFile[]>(res);
+}
+
+export async function createProjectFile(
+  token: string,
+  projectId: string,
+  path: string,
+  content?: string
+): Promise<ProjectFile> {
+  const res = await fetch(`/api/projects/${projectId}/files`, {
+    method: 'POST',
+    headers: authHeaders(token),
+    body: JSON.stringify({ path, content }),
+  });
+  return parseJsonOrThrow<ProjectFile>(res);
+}
+
+export async function moveProjectFile(
+  token: string,
+  projectId: string,
+  fromPath: string,
+  toPath: string
+): Promise<ProjectFile> {
+  const res = await fetch(`/api/projects/${projectId}/files/move`, {
+    method: 'PATCH',
+    headers: authHeaders(token),
+    body: JSON.stringify({ fromPath, toPath }),
+  });
+  return parseJsonOrThrow<ProjectFile>(res);
+}
+
+// Soft-delete per apps/api/src/handlers/files.ts: `confirm=true` is required
+// by the API itself (CLAUDE.md rule #1), and the row is recoverable via
+// POST /projects/:projectId/files/restore — FileTree's UI copy reflects
+// that reversibility rather than implying a permanent delete.
+export async function deleteProjectFile(
+  token: string,
+  projectId: string,
+  path: string
+): Promise<{ ok: boolean; id: string; path: string }> {
+  const res = await fetch(`/api/projects/${projectId}/files/content?path=${encodeURIComponent(path)}&confirm=true`, {
+    method: 'DELETE',
+    headers: authHeaders(token),
+  });
+  return parseJsonOrThrow<{ ok: boolean; id: string; path: string }>(res);
 }
 
 export async function listWorkspaces(token: string): Promise<Workspace[]> {
