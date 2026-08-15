@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, varchar, jsonb, integer, bigint } from 'drizzle-orm/pg-core';
+import { pgTable, text, timestamp, uuid, varchar, jsonb, integer, bigint, uniqueIndex } from 'drizzle-orm/pg-core';
 import { InferSelectModel, sql } from 'drizzle-orm';
 
 // Clerk handles user auth; we only store the user ID
@@ -89,9 +89,48 @@ export const deployments = pgTable('deployments', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Per ADR 0010: a Project's files are rows in this table, one per path, not
+// a server-side git repository — that's a deliberately deferred Phase 3
+// decision (see the ADR). Unlike `approvals`, `aione_app` keeps UPDATE/
+// DELETE here: this data is meant to be mutated by its owner (the signed-in
+// user editing their project), not an append-only audit record.
+//
+// `deletedAt` implements a soft-delete rather than a hard DROP on a single
+// DELETE-route call, per CLAUDE.md rule #1 (destructive actions need
+// explicit confirmation) — see apps/api/src/handlers/files.ts's DELETE
+// route for the two-step confirm this backs.
+//
+// The unique (project_id, path) constraint ADR 0010 calls for is scoped to
+// live (non-deleted) rows via a partial index: a soft-deleted row must not
+// permanently block re-creating a file at the same path, or soft-delete
+// would behave like a hard delete the moment anyone tries to undo it by
+// writing the file again.
+export const projectFiles = pgTable('project_files', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  projectId: uuid('project_id').notNull().references(() => projects.id),
+  path: text('path').notNull(),
+  content: text('content').notNull().default(''),
+  deletedAt: timestamp('deleted_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (table) => ({
+  // NOTE: drizzle-kit 0.20 (this repo's pinned version) does not emit the
+  // `WHERE` clause from `.where()` into generated migration SQL or into
+  // `drizzle/meta/*_snapshot.json`'s "indexes" entry — that's a version gap,
+  // not this being unsupported by Postgres. drizzle/0006_brown_shriek.sql
+  // has the partial condition added by hand to match this declaration. If
+  // this schema ever changes and `drizzle-kit generate` is re-run, check
+  // the emitted SQL for this index and re-add `WHERE deleted_at is null` by
+  // hand if it's missing.
+  projectPathUnique: uniqueIndex('project_files_project_id_path_unique')
+    .on(table.projectId, table.path)
+    .where(sql`deleted_at is null`),
+}));
+
 export type Workspace = InferSelectModel<typeof workspaces>;
 export type Project = InferSelectModel<typeof projects>;
 export type Session = InferSelectModel<typeof sessions>;
 export type Run = InferSelectModel<typeof runs>;
 export type Approval = InferSelectModel<typeof approvals>;
 export type Deployment = InferSelectModel<typeof deployments>;
+export type ProjectFile = InferSelectModel<typeof projectFiles>;
