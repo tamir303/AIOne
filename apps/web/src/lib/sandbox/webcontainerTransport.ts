@@ -30,13 +30,24 @@ export interface WebContainerFileTree {
   [name: string]: WebContainerFileNode | WebContainerDirectoryNode;
 }
 
-/** Structural equivalent of `@webcontainer/api`'s `WebContainerProcess`. */
+/**
+ * Structural equivalent of `@webcontainer/api`'s `WebContainerProcess`. Every
+ * spawned process — whether used for a batch `exec()` or an interactive
+ * shell (issue #42) — carries this full PTY-backed shape (`input`/`resize`
+ * included); `exec()` just doesn't happen to read `input` or call
+ * `resize()`, the same way it discards `WebContainerProcess.input` by never
+ * touching it.
+ */
 export interface WebContainerProcessTransport {
   /** Resolves with the process's exit code once it terminates. */
   exit: Promise<number>;
+  /** Input stream for the attached pseudoterminal, matching `WebContainerProcess.input`. */
+  input: WritableStream<string>;
   /** Combined stdout+stderr stream, matching `WebContainerProcess.output`. */
   output: ReadableStream<string>;
   kill(): void;
+  /** Resizes the attached pseudoterminal, matching `WebContainerProcess.resize`. */
+  resize(dimensions: { cols: number; rows: number }): void;
 }
 
 export interface WebContainerSpawnOptions {

@@ -7,6 +7,7 @@ import {
   type ExecResult,
   type FileMap,
   type Handle,
+  type InteractiveProcess,
   type LaneSpec,
   type SandboxLane,
 } from './types.js';
@@ -122,6 +123,40 @@ export class WebContainerLane implements SandboxLane {
     await collectOutput;
 
     return { exitCode, stdout, stderr: '' };
+  }
+
+  async spawnInteractive(h: Handle, cmd: Command): Promise<InteractiveProcess> {
+    const instance = this.requireInstance(h);
+
+    let process: Awaited<ReturnType<WebContainerInstanceTransport['spawn']>>;
+    try {
+      process = await instance.spawn(cmd.cmd, cmd.args ? [...cmd.args] : [], { cwd: cmd.cwd });
+    } catch (error) {
+      throw new ExecFailedError(`Failed to spawn interactive process "${cmd.cmd}".`, {
+        cause: error,
+      });
+    }
+
+    const inputWriter = process.input.getWriter();
+
+    return {
+      output: process.output,
+      write(data: string) {
+        // Fire-and-forget: a Terminal component's xterm.js `onData` callback
+        // is synchronous per keystroke, and there is nothing per-keystroke
+        // for a caller to usefully do with a rejected write besides drop it
+        // — same rationale as exec()'s own swallowed stream-teardown race
+        // above.
+        void inputWriter.write(data).catch(() => undefined);
+      },
+      resize(size) {
+        process.resize(size);
+      },
+      exit: process.exit,
+      kill() {
+        process.kill();
+      },
+    };
   }
 
   async previewUrl(h: Handle): Promise<URL | null> {

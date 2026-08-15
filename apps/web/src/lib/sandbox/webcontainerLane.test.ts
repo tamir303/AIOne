@@ -24,20 +24,31 @@ function fakeProcess(overrides: {
   const chunks = overrides.chunks ?? [];
   const closeOutput = overrides.closeOutput ?? true;
   const kill = vi.fn();
+  const resize = vi.fn();
+  const writtenInput: string[] = [];
   const output = new ReadableStream<string>({
     start(controller) {
       for (const chunk of chunks) controller.enqueue(chunk);
       if (closeOutput) controller.close();
     },
   });
+  const input = new WritableStream<string>({
+    write(chunk) {
+      writtenInput.push(chunk);
+    },
+  });
 
   return {
     process: {
       exit: overrides.exit ?? Promise.resolve(0),
+      input,
       output,
       kill,
+      resize,
     },
     kill,
+    resize,
+    writtenInput,
   };
 }
 
@@ -261,6 +272,110 @@ describe('WebContainerLane', () => {
 
       await expect(
         lane.exec({ id: 'nope', kind: 'webcontainers' }, { cmd: 'ls' }),
+      ).rejects.toThrow(LaneUnavailableError);
+    });
+  });
+
+  describe('spawnInteractive', () => {
+    it('spawns the command with its args and cwd, and exposes the raw output stream', async () => {
+      const { instance, spawn } = fakeTransport();
+      const { process } = fakeProcess({ chunks: ['hello'] });
+      spawn.mockResolvedValueOnce(process);
+      const lane = new WebContainerLane(async () => instance);
+      const handle = await lane.start({ kind: 'webcontainers' });
+
+      const interactive = await lane.spawnInteractive(handle, {
+        cmd: 'jsh',
+        args: ['-l'],
+        cwd: '/app',
+      });
+
+      expect(spawn).toHaveBeenCalledWith('jsh', ['-l'], { cwd: '/app' });
+      expect(interactive.output).toBe(process.output);
+    });
+
+    it('defaults args to an empty array when the Command omits them', async () => {
+      const { instance, spawn } = fakeTransport();
+      const lane = new WebContainerLane(async () => instance);
+      const handle = await lane.start({ kind: 'webcontainers' });
+
+      await lane.spawnInteractive(handle, { cmd: 'jsh' });
+
+      expect(spawn).toHaveBeenCalledWith('jsh', [], { cwd: undefined });
+    });
+
+    it('forwards write() calls to the process input stream', async () => {
+      const { instance, spawn } = fakeTransport();
+      const { process, writtenInput } = fakeProcess();
+      spawn.mockResolvedValueOnce(process);
+      const lane = new WebContainerLane(async () => instance);
+      const handle = await lane.start({ kind: 'webcontainers' });
+
+      const interactive = await lane.spawnInteractive(handle, { cmd: 'jsh' });
+      interactive.write('ls -la\n');
+      // write() is fire-and-forget, so flush the fake timers/microtask queue
+      // to let the underlying WritableStream's writer process the queued
+      // chunk before asserting on it (same fake-timer setup as the rest of
+      // this suite; see beforeEach above).
+      await vi.advanceTimersByTimeAsync(0);
+
+      expect(writtenInput).toEqual(['ls -la\n']);
+    });
+
+    it('forwards resize() calls to the process', async () => {
+      const { instance, spawn } = fakeTransport();
+      const { process, resize } = fakeProcess();
+      spawn.mockResolvedValueOnce(process);
+      const lane = new WebContainerLane(async () => instance);
+      const handle = await lane.start({ kind: 'webcontainers' });
+
+      const interactive = await lane.spawnInteractive(handle, { cmd: 'jsh' });
+      interactive.resize({ cols: 100, rows: 40 });
+
+      expect(resize).toHaveBeenCalledWith({ cols: 100, rows: 40 });
+    });
+
+    it('forwards kill() calls to the process', async () => {
+      const { instance, spawn } = fakeTransport();
+      const { process, kill } = fakeProcess();
+      spawn.mockResolvedValueOnce(process);
+      const lane = new WebContainerLane(async () => instance);
+      const handle = await lane.start({ kind: 'webcontainers' });
+
+      const interactive = await lane.spawnInteractive(handle, { cmd: 'jsh' });
+      interactive.kill();
+
+      expect(kill).toHaveBeenCalledTimes(1);
+    });
+
+    it('exposes the process exit promise for exit detection', async () => {
+      const { instance, spawn } = fakeTransport();
+      const { process } = fakeProcess({ exit: Promise.resolve(0) });
+      spawn.mockResolvedValueOnce(process);
+      const lane = new WebContainerLane(async () => instance);
+      const handle = await lane.start({ kind: 'webcontainers' });
+
+      const interactive = await lane.spawnInteractive(handle, { cmd: 'jsh' });
+
+      await expect(interactive.exit).resolves.toBe(0);
+    });
+
+    it('throws ExecFailedError when spawn() rejects', async () => {
+      const { instance, spawn } = fakeTransport();
+      spawn.mockRejectedValueOnce(new Error('command not found'));
+      const lane = new WebContainerLane(async () => instance);
+      const handle = await lane.start({ kind: 'webcontainers' });
+
+      await expect(lane.spawnInteractive(handle, { cmd: 'doesnotexist' })).rejects.toThrow(
+        ExecFailedError,
+      );
+    });
+
+    it('throws LaneUnavailableError for an unknown handle', async () => {
+      const lane = new WebContainerLane(vi.fn());
+
+      await expect(
+        lane.spawnInteractive({ id: 'nope', kind: 'webcontainers' }, { cmd: 'jsh' }),
       ).rejects.toThrow(LaneUnavailableError);
     });
   });
