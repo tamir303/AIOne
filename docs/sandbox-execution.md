@@ -75,7 +75,7 @@ The threat this closes: a prompt-injected agent generating code that exfiltrates
 
 ## Preview URLs
 
-WebContainers previews are same-origin to the tab and free. E2B previews need a proxy with a per-session token; they must never be guessable URLs, because a preview of an in-progress app frequently has auth disabled.
+WebContainers previews are free to embed directly — no auth proxy needed. ("Same-origin to the tab" describes how the browser treats them, not literal same-origin: a WebContainers preview URL is a distinct `*.webcontainer-api.io`-style subdomain, genuinely cross-origin from the AIOne tab, but it's the tab's own WebContainer runtime serving it, so there's no separate account/session boundary to authenticate across the way there is with E2B below.) E2B previews need a proxy with a per-session token; they must never be guessable URLs, because a preview of an in-progress app frequently has auth disabled.
 
 ## Cross-origin isolation (COOP/COEP), and Clerk
 
