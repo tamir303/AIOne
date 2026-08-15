@@ -13,6 +13,7 @@ function fakeLane(previewUrl: SandboxLane['previewUrl']): SandboxLane {
     start: vi.fn(),
     writeFiles: vi.fn(),
     exec: vi.fn(),
+    spawnInteractive: vi.fn(),
     previewUrl,
     dispose: vi.fn(),
   };
