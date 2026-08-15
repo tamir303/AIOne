@@ -78,3 +78,15 @@ export interface Deployment {
   status: 'pending' | 'in_progress' | 'success' | 'failed';
   createdAt: Date;
 }
+
+// Mirrors the fields returned by GET /projects/:projectId/files (see
+// apps/api/src/handlers/files.ts) — deliberately omits `content`, which that
+// route omits from the tree listing on purpose. `packages/db`'s ProjectFile
+// (the full row, including content and deletedAt) is the persistence-layer
+// type; this is the API-surface subset the web app's file tree needs.
+export interface ProjectFile {
+  id: string;
+  path: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
