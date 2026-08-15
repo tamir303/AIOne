@@ -122,6 +122,54 @@ export async function approveDiff(runId: string): Promise<Approval> {
   return res.json();
 }
 
+export interface ProjectFileContent {
+  id: string;
+  projectId: string;
+  path: string;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+async function readErrorMessage(res: Response, fallback: string): Promise<string> {
+  try {
+    const body = await res.json();
+    if (body && typeof body.error === 'string') {
+      return body.error;
+    }
+  } catch {
+    // response wasn't JSON — fall through to the generic message below.
+  }
+  return `${fallback} (${res.status})`;
+}
+
+export async function getFileContent(token: string, projectId: string, path: string): Promise<ProjectFileContent> {
+  const res = await fetch(`/api/projects/${projectId}/files/content?path=${encodeURIComponent(path)}`, {
+    headers: authHeaders(token),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res, `Failed to load ${path}`));
+  }
+  return res.json();
+}
+
+export async function saveFileContent(
+  token: string,
+  projectId: string,
+  path: string,
+  content: string
+): Promise<ProjectFileContent> {
+  const res = await fetch(`/api/projects/${projectId}/files/content?path=${encodeURIComponent(path)}`, {
+    method: 'PUT',
+    headers: authHeaders(token),
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) {
+    throw new Error(await readErrorMessage(res, `Failed to save ${path}`));
+  }
+  return res.json();
+}
+
 export function streamRun(runId: string, callback: (event: any) => void): () => void {
   const eventSource = new EventSource(`/api/events/${runId}`);
 

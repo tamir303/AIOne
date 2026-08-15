@@ -2,7 +2,17 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "jsxImportSource": "react"
+    "jsxImportSource": "react",
+    // Override the root config's Node-oriented "nodenext" resolution:
+    // this package is bundled by Vite/esbuild for the browser, not run
+    // under Node, and "bundler" is the resolution mode TS recommends for
+    // that case. Also fixes a real type-check failure: monaco-editor's
+    // package.json "exports" map has no "types" condition for its
+    // subpath wildcard (e.g. "monaco-editor/esm/vs/editor/editor.api",
+    // used internally by @monaco-editor/react's own .d.ts), which
+    // "nodenext" refuses to resolve and "bundler" does.
+    "moduleResolution": "bundler",
+    "module": "ESNext"
   },
   "include": ["src/**/*"]
 }
