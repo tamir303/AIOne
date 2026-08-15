@@ -88,9 +88,14 @@ export default function PreviewPane({ lane, handle }: PreviewPaneProps) {
             // to function at all; allow-same-origin is needed for
             // WebContainers preview content itself to work (service
             // workers, relative-URL module fetches, etc.) within its own
-            // distinct preview origin. This content is same-origin to the
-            // tab per docs/sandbox-execution.md's "Preview URLs" section
-            // (no E2B-style token-proxy needed here), but it's still
+            // preview origin. That preview origin is a distinct
+            // `*.webcontainer-api.io`-style subdomain — genuinely
+            // cross-origin from this tab, not literally same-origin — so
+            // allow-same-origin + allow-scripts together does not hand the
+            // preview content access to the parent page; it only lets the
+            // preview act like a normal same-origin app relative to itself.
+            // See docs/sandbox-execution.md's "Preview URLs" section for why
+            // that also means no E2B-style token-proxy is needed here. Still
             // arbitrary user/agent-generated app code, so no
             // allow-top-navigation and no allow-pointer-lock beyond what's
             // listed.
