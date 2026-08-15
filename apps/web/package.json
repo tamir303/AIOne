@@ -17,6 +17,7 @@
     "@clerk/react": "^6.13.1",
     "@monaco-editor/react": "^4.7.0",
     "@webcontainer/api": "^1.6.4",
+    "@xterm/xterm": "^5.5.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   },

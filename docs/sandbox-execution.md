@@ -51,10 +51,13 @@ interface SandboxLane {
   start(spec: LaneSpec): Promise<Handle>;
   writeFiles(h: Handle, files: FileMap): Promise<void>;
   exec(h: Handle, cmd: Command): Promise<ExecResult>;  // gate-checked upstream
+  spawnInteractive(h: Handle, cmd: Command): Promise<InteractiveProcess>;  // xterm.js terminal, issue #42
   previewUrl(h: Handle): Promise<URL | null>;
   dispose(h: Handle): Promise<void>;
 }
 ```
+
+`spawnInteractive` (issue #42) is the PTY-backed counterpart to `exec()`: instead of collecting output into a single `ExecResult` once the process exits, it hands back an `InteractiveProcess` — a live output stream, a `write()` for input, `resize()` for the attached pseudoterminal's cols/rows, and an `exit` promise — and leaves the process running until the caller kills it or it exits on its own (e.g. `exit` typed into a shell). It never times out on its own the way `exec()` does; there's no defined "done" point for an interactive shell. `apps/web/src/components/Terminal.tsx` is the one consumer today, piping xterm.js's input/output through it.
 
 `@webcontainer/api` and `e2b` are imported in exactly one directory each — their adapter. An agent module that imports a sandbox SDK directly fails review. Swapping a provider should be one adapter file, not a migration.
 
